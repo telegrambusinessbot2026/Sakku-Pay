@@ -1,0 +1,65 @@
+name: Build SakkuPay Companion APK
+
+on:
+  push:
+    branches: [ main, release/** ]
+    paths:
+      - 'companion-android/**'
+      - '.github/workflows/build-companion-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Assemble Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
+
+      - name: Setup Gradle 8.7
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Assemble Release APK
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleRelease --no-daemon --stacktrace
+          else
+            gradle assembleRelease --no-daemon --stacktrace
+          fi
+        working-directory: companion-android
+
+      - name: Verify APK Integrity
+        run: |
+          APK_FILE="companion-android/app/build/outputs/apk/release/app-release.apk"
+          if [ -f "$APK_FILE" ]; then
+            echo "✅ Release APK generated successfully: $(ls -lh $APK_FILE)"
+          else
+            echo "❌ APK build artifact not found"
+            exit 1
+          fi
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sakkupay-companion-v1.0.apk
+          path: companion-android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
