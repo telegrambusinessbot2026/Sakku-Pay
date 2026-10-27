@@ -1,4 +1,4 @@
-package in.sakkupay.companion
+package `in`.sakkupay.companion
 
 data class Payment(
     val amount: Double,

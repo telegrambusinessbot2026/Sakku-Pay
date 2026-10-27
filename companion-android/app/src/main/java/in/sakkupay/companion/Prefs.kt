@@ -1,4 +1,4 @@
-package in.sakkupay.companion
+package `in`.sakkupay.companion
 
 import android.content.Context
 
