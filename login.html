@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Merchant Sign In - SakkuPay</title>
+  <meta name="description" content="Sign in to your SakkuPay merchant portal to generate UPI payment links and monitor real-time transactions.">
+  <link rel="icon" type="image/svg+xml" href="/assets/logo-icon.svg">
+  <link rel="stylesheet" href="/home.css">
+  <style>
+    body {
+      background: radial-gradient(circle at 50% -10%, rgba(99, 102, 241, 0.22) 0%, #0B0F17 70%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      color: #94A3B8;
+    }
+
+    .auth-nav {
+      padding: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .auth-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 30px 20px 60px;
+    }
+
+    .login-card {
+      background: #111827;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 24px;
+      box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.04);
+      width: 100%;
+      max-width: 440px;
+      padding: 44px 36px;
+      text-align: center;
+      position: relative;
+    }
+
+    .login-brand-icon {
+      width: 68px;
+      height: 68px;
+      margin: 0 auto 22px;
+      display: block;
+      filter: drop-shadow(0 6px 16px rgba(99, 102, 241, 0.35));
+    }
+
+    .login-title {
+      font-size: 26px;
+      font-weight: 800;
+      color: #FFFFFF;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+
+    .login-subtitle {
+      font-size: 14px;
+      color: #94A3B8;
+      line-height: 1.55;
+      margin-bottom: 30px;
+    }
+
+    .google-signin-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      width: 100%;
+      padding: 14px 20px;
+      background: #161F30;
+      border: 1.5px solid rgba(255, 255, 255, 0.15);
+      border-radius: 14px;
+      color: #FFFFFF;
+      font-family: var(--font-heading);
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      text-decoration: none;
+    }
+
+    .google-signin-btn:hover {
+      background: #1E293B;
+      border-color: #6366F1;
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.35);
+      transform: translateY(-2px);
+      color: #FFFFFF;
+    }
+
+    .google-signin-btn:active {
+      transform: translateY(0);
+    }
+
+    .google-icon {
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+    }
+
+    .security-notice {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 30px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 12.5px;
+      color: #94A3B8;
+      text-align: left;
+    }
+
+    .sec-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .error-banner {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #F87171;
+      font-size: 13px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin-bottom: 22px;
+      display: none;
+      text-align: left;
+    }
+
+    .login-footer-links {
+      margin-top: 28px;
+      font-size: 13px;
+      color: #64748B;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .login-footer-links a {
+      color: #94A3B8;
+    }
+
+    .login-footer-links a:hover {
+      color: #FFFFFF;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation header -->
+  <header class="auth-nav">
+    <a href="/" class="logo-wrap" title="Back to Homepage">
+      <img src="/assets/logo.svg" alt="SakkuPay Logo">
+    </a>
+    <a href="/" class="btn btn-outline btn-sm">← Back to Homepage</a>
+  </header>
+
+  <!-- Login Main Content -->
+  <main class="auth-wrapper">
+    <div class="login-card">
+      <img src="/assets/logo-icon.svg" alt="SakkuPay Icon" class="login-brand-icon">
+
+      <div id="error-alert" class="error-banner"></div>
+
+      <h1 class="login-title">Merchant Sign In</h1>
+      <p class="login-subtitle">
+        Sign in to your SakkuPay dashboard to generate custom payment links, track live payouts, and configure auto-verification.
+      </p>
+
+      <!-- Google OAuth Sign-In Button -->
+      <a href="/api/auth/google/start" class="google-signin-btn" id="google-btn">
+        <svg class="google-icon" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+        </svg>
+        <span>Continue with Google</span>
+      </a>
+
+      <!-- Security Guarantees -->
+      <div class="security-notice">
+        <div class="sec-item">
+          <span>🔒</span>
+          <span>Google OAuth 2.0 Secure Authentication</span>
+        </div>
+        <div class="sec-item">
+          <span>⚡</span>
+          <span>Zero passwords, zero OTP delays</span>
+        </div>
+        <div class="sec-item">
+          <span>🛡</span>
+          <span>We never ask for bank PINs or card details</span>
+        </div>
+      </div>
+
+      <div class="login-footer-links">
+        <a href="/">← Home</a>
+        <a href="/admin">Admin Portal →</a>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (function() {
+      const searchParams = new URLSearchParams(window.location.search);
+      const isSessionExpired = searchParams.has('session_expired');
+      const oauthErr = searchParams.get('oauth_error');
+      const isLogout = searchParams.has('logout');
+
+      // 1. If explicit error or logout / session expired, purge stored tokens immediately
+      if (isSessionExpired || oauthErr || isLogout) {
+        localStorage.removeItem('sakku-token');
+        localStorage.removeItem('sakku_token');
+      }
+
+      // Display OAuth or session error if present
+      const errorEl = document.getElementById('error-alert');
+      if (errorEl) {
+        if (oauthErr) {
+          errorEl.style.display = 'block';
+          if (oauthErr === 'invalid_state') {
+            errorEl.textContent = 'Sign-in session timed out or invalid state. Please try again.';
+          } else if (oauthErr === 'google_signin_failed') {
+            errorEl.textContent = 'Google verification was unsuccessful. Please retry with a valid Google account.';
+          } else {
+            errorEl.textContent = 'Sign-in error: ' + oauthErr;
+          }
+        } else if (isSessionExpired) {
+          errorEl.style.display = 'block';
+          errorEl.textContent = 'Your session has expired. Please sign in again with Google.';
+        }
+      }
+
+      // 2. Extract access token from URL hash or query params if present
+      let incomingToken = null;
+      if (window.location.hash) {
+        const hash = window.location.hash.replace(/^#\/?/, '');
+        const hashParams = new URLSearchParams(hash);
+        incomingToken = hashParams.get('access_token') || hashParams.get('token');
+      }
+      if (!incomingToken && searchParams) {
+        incomingToken = searchParams.get('access_token') || searchParams.get('token');
+      }
+
+      if (incomingToken) {
+        incomingToken = incomingToken.trim();
+        localStorage.setItem('sakku-token', incomingToken);
+        window.location.replace('/dashboard');
+        return;
+      }
+
+      // 3. If already logged in and not in an error/expired state, redirect straight to dashboard
+      const existing = localStorage.getItem('sakku-token') || localStorage.getItem('sakku_token');
+      if (existing && !oauthErr && !isSessionExpired && !isLogout) {
+        window.location.replace('/dashboard');
+      }
+    })();
+  </script>
+</body>
+</html>

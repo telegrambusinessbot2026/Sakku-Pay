@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <defs>
+    <linearGradient id="sakku-grad-sq" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4F46E5" />
+      <stop offset="50%" stop-color="#6366F1" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+    <filter id="icon-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#4F46E5" flood-opacity="0.3" />
+    </filter>
+  </defs>
+
+  <rect width="64" height="64" rx="18" fill="url(#sakku-grad-sq)" filter="url(#icon-shadow)" />
+
+  <!-- Stylized S Curve -->
+  <path d="M44 20 C40 16, 29 16, 24 20 C19 24, 19 29, 24 32 L38 35 C45 36, 46 43, 40 47 C34 51, 23 51, 18 45"
+        stroke="#FFFFFF" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+
+  <!-- Payment Lightning Bolt Accent -->
+  <path d="M35 18 L26 32 L37 32 L28 47"
+        stroke="#FACC15" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+
+  <circle cx="44" cy="20" r="3" fill="#FACC15" />
+</svg>

@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Merchant Portal — SakkuPay</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/logo-icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ── Zero-flash dark-mode lock ── */
+    html, body { background: #0B0F17; color: #F8FAFC; margin: 0; }
+    .page { display: none !important; }
+    .page.active { display: block !important; }
+    .backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72); z-index: 500; align-items: center; justify-content: center; padding: 20px; }
+    .backdrop.open { display: flex; }
+    * { box-sizing: border-box; }
+  </style>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="app-extra.css">
+</head>
+<body>
+
+<div id="app-shell" class="app-shell">
+
+  <!-- ═══════════════════════════════════════
+       SIDEBAR
+  ════════════════════════════════════════ -->
+  <aside class="sidebar">
+
+    <!-- Logo / Brand -->
+    <a class="brand" onclick="go('overview')" style="cursor:pointer">
+      <img src="/assets/logo.svg" alt="SakkuPay" style="height:32px;width:auto">
+      <span style="background:rgba(129,140,248,0.18);color:#A5B4FC;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;letter-spacing:0.6px">MERCHANT</span>
+    </a>
+
+    <!-- Workspace card -->
+    <div class="workspace" id="workspace-card" onclick="go('settings')" style="cursor:pointer" title="Manage merchant profile">
+      <i id="ws-avatar">SK</i>
+      <div>
+        <strong id="ws-name">Merchant Store</strong>
+        <small>UPI Settlement Workspace</small>
+      </div>
+      <span class="workspace-arrow">▾</span>
+    </div>
+
+    <!-- Navigation -->
+    <nav>
+      <button class="nav active" data-page="overview">
+        <span class="nav-icon">⌘</span> Overview
+      </button>
+      <button class="nav" data-page="links">
+        <span class="nav-icon">↗</span> Payment Links
+      </button>
+      <button class="nav" data-page="upi">
+        <span class="nav-icon">◉</span> UPI Accounts
+      </button>
+      <button class="nav" data-page="transactions">
+        <span class="nav-icon">▣</span> Transactions
+      </button>
+      <button class="nav" data-page="companion">
+        <span class="nav-icon">🤖</span> Companion App
+      </button>
+      <button class="nav" data-page="developers">
+        <span class="nav-icon">⌥</span> Developer API
+      </button>
+      <button class="nav" data-page="settings">
+        <span class="nav-icon">⚙</span> Settings
+      </button>
+    </nav>
+
+    <!-- Bottom section -->
+    <div class="side-end">
+      <div class="help" id="help-card-btn" style="cursor:pointer" title="Open Help Center">
+        <span class="help-badge">?</span>
+        <span>
+          <strong>Merchant Support</strong>
+          <small>Help &amp; Documentation</small>
+        </span>
+      </div>
+      <div class="profile" id="profile-sidebar-btn" style="cursor:pointer" title="Account Settings">
+        <i id="user-avatar">AS</i>
+        <span>
+          <strong id="user-display-name">Merchant</strong>
+          <small id="user-display-email">merchant@sakkupay.in</small>
+        </span>
+        <button class="logout-icon-btn" onclick="logout()" title="Sign out">⎋</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══════════════════════════════════════
+       MAIN CONTENT
+  ════════════════════════════════════════ -->
+  <main class="main-area">
+
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="crumb">
+        <button class="menu-btn mobile" onclick="document.querySelector('.sidebar')?.classList.toggle('open')" title="Toggle menu">☰</button>
+        <span class="badge" style="background:rgba(16,185,129,0.15);color:#34D399;border:1px solid rgba(16,185,129,0.3);font-size:11px;padding:3px 10px;border-radius:14px">● Live Settlement Active</span>
+        <span id="header-merchant-name" style="font-size:13px;color:var(--muted);font-weight:600">SakkuPay Gateway</span>
+      </div>
+      <div class="top-actions">
+        <button class="primary" onclick="openLinkModal()" style="padding:8px 16px;font-size:13px;border-radius:8px">+ Create Link</button>
+        <button class="outline" onclick="openUpiModal(null)" style="padding:8px 14px;font-size:13px;border-radius:8px">+ Add UPI</button>
+      </div>
+    </header>
+
+    <!-- Page container -->
+    <div class="page-container">
+
+      <!-- ─────────────────────────────────────
+           PAGE: OVERVIEW
+      ───────────────────────────────────── -->
+      <section class="page active" id="overview">
+        <div class="heading">
+          <div>
+            <p class="eyebrow">DASHBOARD OVERVIEW</p>
+            <h1 id="overview-greeting">Welcome back 👋</h1>
+            <p>Real-time analytics across your active links and incoming UPI settlements.</p>
+          </div>
+          <div class="heading-actions">
+            <select class="filter-select" id="overview-range-select" onchange="refresh()">
+              <option value="month">Last 30 days</option>
+              <option value="today">Today</option>
+              <option value="all">All time</option>
+            </select>
+            <button class="outline" onclick="refresh()">↻ Refresh</button>
+          </div>
+        </div>
+
+        <!-- Stats grid -->
+        <div class="stats">
+          <article class="stat purple">
+            <label>CONFIRMED REVENUE <b>₹</b></label>
+            <strong id="stat-volume">₹0<small>.00</small></strong>
+            <p>↗ Confirmed UPI Collections</p>
+            <div class="bars"></div>
+          </article>
+          <article class="stat blue">
+            <label>SUCCESSFUL PAYMENTS <b>✓</b></label>
+            <strong id="stat-successful">0</strong>
+            <p>↗ Completed Transactions</p>
+            <div class="bars"></div>
+          </article>
+          <article class="stat orange">
+            <label>PENDING PAYMENTS <b>◷</b></label>
+            <strong id="stat-pending">0</strong>
+            <p class="warn">Awaiting Verification</p>
+            <div class="bars"></div>
+          </article>
+          <article class="stat green">
+            <label>ACTIVE LINKS <b>↗</b></label>
+            <strong id="active-links">0</strong>
+            <p>Ready to Receive Money</p>
+            <div class="bars"></div>
+          </article>
+        </div>
+
+        <!-- Dash grid -->
+        <div class="dash-grid">
+          <article class="panel">
+            <div class="panel-head">
+              <span>
+                <h2>Recent Payments</h2>
+                <p>Latest customer transactions across your active links</p>
+              </span>
+              <button class="text" onclick="go('transactions')">View All →</button>
+            </div>
+            <div class="scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>CUSTOMER</th>
+                    <th>PAYMENT LINK</th>
+                    <th>AMOUNT</th>
+                    <th>STATUS</th>
+                    <th>DATE</th>
+                    <th>ACTION</th>
+                  </tr>
+                </thead>
+                <tbody id="recent">
+                  <tr><td colspan="6" class="loading">Loading recent transactions…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="panel quick-panel">
+            <div class="panel-head">
+              <span>
+                <h2>Quick Operations</h2>
+                <p>Essential merchant shortcuts</p>
+              </span>
+            </div>
+            <div class="quick-list">
+              <button class="quick" onclick="openLinkModal()">
+                <i>＋</i>
+                <span><b>Create a Payment Link</b><small>Generate shareable URL with dynamic QR</small></span>
+                <em>→</em>
+              </button>
+              <button class="quick" onclick="openUpiModal(null)">
+                <i>◉</i>
+                <span><b>Connect UPI Account</b><small>Bind UPI ID &amp; 10-digit mobile number</small></span>
+                <em>→</em>
+              </button>
+              <button class="quick" onclick="go('companion')">
+                <i>🤖</i>
+                <span><b>Companion App Setup</b><small>Auto-verify payments via Android webhook</small></span>
+                <em>→</em>
+              </button>
+              <button class="quick" onclick="go('developers')">
+                <i>⌥</i>
+                <span><b>Developer API Keys</b><small>Integrate with bots, stores, or APIs</small></span>
+                <em>→</em>
+              </button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────────────
+           PAGE: PAYMENT LINKS
+      ───────────────────────────────────── -->
+      <section class="page" id="links">
+        <div class="heading">
+          <div>
+            <p class="eyebrow">COLLECT PAYMENTS</p>
+            <h1>Payment Links</h1>
+            <p>Create and manage links for products, subscriptions, services, or open customer donations.</p>
+          </div>
+          <button class="primary" onclick="openLinkModal()">+ Create Payment Link</button>
+        </div>
+
+        <div class="filters-row">
+          <div class="search-wrap">
+            <span class="search-icon">⌕</span>
+            <input id="link-search-input" placeholder="Search links by title, slug, or amount…" oninput="renderLinks()">
+          </div>
+          <select class="filter-select" id="link-status-filter" onchange="renderLinks()">
+            <option value="all">All statuses</option>
+            <option value="active">Active only</option>
+            <option value="inactive">Inactive only</option>
+          </select>
+        </div>
+
+        <article class="panel">
+          <div class="scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>LINK &amp; SLUG</th>
+                  <th>PRICING TYPE</th>
+                  <th>TARGET AMOUNT</th>
+                  <th>COLLECTED</th>
+                  <th>STATUS</th>
+                  <th>ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody id="link-table">
+                <tr><td colspan="6" class="loading">Loading payment links…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <!-- ─────────────────────────────────────
+           PAGE: UPI ACCOUNTS
+      ───────────────────────────────────── -->
+      <section class="page" id="upi">
+        <div class="heading">
+          <div>
+            <p class="eyebrow">RECEIVING DESTINATIONS</p>
+            <h1>UPI Accounts</h1>
+            <p>Customer payments credit directly into your connected UPI bank accounts with 0% gateway commission.</p>
+          </div>
+          <button class="primary" onclick="openUpiModal(null)">+ Add UPI Account</button>
+        </div>
+        <div class="upi-grid" id="upi-cards">
+          <div class="loading">Loading connected UPI accounts…</div>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────────────
+           PAGE: TRANSACTIONS
+      ───────────────────────────────────── -->
+      <section class="page" id="transactions">
+        <div class="heading">
+          <div>
+            <p class="eyebrow">SETTLEMENT LEDGER</p>
+            <h1>Transactions</h1>
+            <p>Real-time transaction tracking and segregated reconciliation ledger.</p>
+          </div>
+          <div class="heading-actions">
+            <button class="outline" id="export-csv-btn" onclick="exportTransactionsCSV()">⇩ Export CSV</button>
+            <button class="outline" onclick="loadTransactions()">↻ Refresh</button>
+          </div>
+        </div>
+
+        <div class="filters-row">
+          <div class="search-wrap">
+            <span class="search-icon">⌕</span>
+            <input id="tx-search-input" placeholder="Search by customer, reference ID, UTR, or amount…" oninput="filterTransactionsLocal()">
+          </div>
+          <select class="filter-select" id="tx-range-select" onchange="loadTransactions()">
+            <option value="month">Last 30 days</option>
+            <option value="today">Today</option>
+            <option value="all">All time</option>
+          </select>
+        </div>
+
+        <div class="tabs">
+          <button class="active" data-filter="all">All Transactions <i id="count-all">0</i></button>
+          <button data-filter="success">Successful <i id="count-success">0</i></button>
+          <button data-filter="pending">Pending <i id="count-pending">0</i></button>
+          <button data-filter="failed">Failed <i id="count-failed">0</i></button>
+        </div>
+
+        <article class="panel">
+          <div class="scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>REFERENCE &amp; CUSTOMER</th>
+                  <th>AMOUNT</th>
+                  <th>STATUS &amp; METHOD</th>
+                  <th>UTR NUMBER</th>
+                  <th>DATE &amp; TIME</th>
+                  <th>ACTION</th>
+                </tr>
+              </thead>
+              <tbody id="transaction-table">
+                <tr><td colspan="6" class="loading">Loading transactions…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <!-- ─────────────────────────────────────
+           PAGE: COMPANION APP
+      ───────────────────────────────────── -->
+      <section class="page" id="companion">
+        <div class="heading">
+          <div>
+            <p class="eyebrow">AUTOMATED VERIFICATION</p>
+            <h1>Android Companion App</h1>
+            <p>Real-time payment verification without relying on third-party payment gateways.</p>
+          </div>
+        </div>
+
+        <!-- Hero card -->
+        <article class="companion-hero-card">
+          <div class="companion-hero-header">
+            <div>
+              <h2 style="font-size:18px;font-weight:700;color:#FFFFFF;margin:0 0 6px">Automated UPI Webhook Listener</h2>
+              <p style="font-size:13.5px;color:var(--muted);margin:0;line-height:1.55">
+                The SakkuPay Companion App runs in the background on your merchant Android phone. It captures incoming payment alerts (Google Pay for Business, PhonePe Business, Paytm Business, and standard bank SMS) and instantly verifies transactions in real time.
+              </p>
+            </div>
+            <span class="companion-status-badge">● Companion Service Active</span>
+          </div>
+
+          <div class="companion-steps-grid">
+            <div class="companion-step-box">
+              <div class="companion-step-num">1</div>
+              <h4>Install App</h4>
+              <p>Install the lightweight SakkuPay Merchant Companion APK on your receiving phone.</p>
+            </div>
+            <div class="companion-step-box">
+              <div class="companion-step-num">2</div>
+              <h4>Grant Access</h4>
+              <p>Enable Notification Access for your business UPI apps (GPay, PhonePe, Paytm, SMS).</p>
+            </div>
+            <div class="companion-step-box">
+              <div class="companion-step-num">3</div>
+              <h4>Enter Credentials</h4>
+              <p>Paste your Merchant ID &amp; Server Webhook URL below into the companion app.</p>
+            </div>
+            <div class="companion-step-box">
+              <div class="companion-step-num">4</div>
+              <h4>Zero-Touch Verify</h4>
+              <p>Every incoming transaction is auto-verified with matching UTR or amount in under 1 second.</p>
+            </div>
+          </div>
+        </article>
+
+        <!-- Credential grid -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:28px">
+          <div class="credential-item-box">
+            <label>Your Merchant ID</label>
+            <div class="credential-val-row">
+              <span class="credential-code" id="companion-merchant-id">—</span>
+              <button class="btn btn-outline btn-sm" id="copy-merchant-id-btn">Copy</button>
+            </div>
+          </div>
+          <div class="credential-item-box">
+            <label>Server Webhook URL</label>
+            <div class="credential-val-row">
+              <span class="credential-code" id="companion-server-url" style="color:#CBD5E1">—</span>
+              <button class="btn btn-outline btn-sm" id="copy-webhook-url-btn">Copy</button>
+            </div>
+          </div>
+          <div class="credential-item-box">
+            <label>API Key for Authentication</label>
+            <div class="credential-val-row">
+              <span style="font-size:12.5px;color:#A5B4FC">Managed under <a href="javascript:void(0)" onclick="go('developers')" style="color:#818CF8;font-weight:600">Developer API</a></span>
+              <button class="btn btn-outline btn-sm" onclick="go('developers')">Manage →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Manual verification -->
+        <article class="panel">
+          <div class="panel-head">
+            <span>
+              <h2>Manual / Instant UTR Verification</h2>
+              <p>Manually verify any pending customer transaction reference or 12-digit bank UTR</p>
+            </span>
+          </div>
+          <form id="direct-verify-form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr)) auto;gap:14px;align-items:end">
+            <div>
+              <label style="font-size:11.5px;font-weight:600;display:block;margin-bottom:6px;color:#E2E8F0">Reference or Transaction ID</label>
+              <input type="text" id="direct-verify-ref" placeholder="SP... or txn_..." required style="width:100%;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card-inner);color:#FFFFFF;outline:none">
+            </div>
+            <div>
+              <label style="font-size:11.5px;font-weight:600;display:block;margin-bottom:6px;color:#E2E8F0">Bank UTR (12 Digits — Optional)</label>
+              <input type="text" id="direct-verify-utr" placeholder="12-digit bank UTR" style="width:100%;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card-inner);color:#FFFFFF;outline:none">
+            </div>
+            <button type="submit" class="primary" id="direct-verify-submit-btn" style="height:42px;padding:0 20px">Verify Transaction</button>
+          </form>
+        </article>
+      </section>
+
+      <!-- ─────────────────────────────────────
+           PAGE: DEVELOPERS
+      ───────────────────────────────────── -->
+      <section class="page" id="developers">
+        <div class="heading">
+          <div>
+            <p class="eyebrow">INTEGRATIONS</p>
+            <h1>Developer API</h1>
+            <p>Programmatically generate payment links and integrate with bots, stores, or backend services.</p>
+          </div>
+          <span class="badge" style="background:rgba(16,185,129,0.15);color:#34D399;font-size:11px;font-weight:700;padding:4px 12px;border-radius:12px">● REST API Operational</span>
+        </div>
+
+        <div class="dev-grid">
+          <article class="panel">
+            <div class="panel-head">
+              <span>
+                <h2>Live API Keys</h2>
+                <p>Authorize external requests using your secret API key.</p>
+              </span>
+              <button class="primary" id="generate-key-btn" onclick="generateApiKey()" style="padding:7px 14px;font-size:12px">+ Generate New Key</button>
+            </div>
+            <div id="keys-list-container">
+              <div class="loading">Loading API keys…</div>
+            </div>
+            <small class="muted" style="display:block;margin-top:14px;font-size:11.5px">Never share your secret API keys in client-side applications or public repositories.</small>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <span>
+                <h2>API Quick Start</h2>
+                <p>Example request to programmatically generate payment links</p>
+              </span>
+            </div>
+            <pre style="background:var(--card-inner);padding:16px;border-radius:10px;font-size:12px;overflow-x:auto;color:#E2E8F0;border:1px solid var(--line);line-height:1.6"><code>curl -X POST https://sakkupay.onrender.com/api/integration/payment-links \
+  -H "x-api-key: YOUR_SECRET_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Design Retainer",
+    "amount": 2999,
+    "amountType": "fixed",
+    "slug": "design-retainer"
+  }'</code></pre>
+          </article>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────────────
+           PAGE: SETTINGS
+      ───────────────────────────────────── -->
+      <section class="page" id="settings">
+        <div class="heading">
+          <div>
+            <p class="eyebrow">MERCHANT SETTINGS</p>
+            <h1>Settings &amp; Profile</h1>
+            <p>Manage your business profile, default receiving destination, and security settings.</p>
+          </div>
+        </div>
+
+        <div class="settings-grid">
+          <article class="panel">
+            <div class="panel-head">
+              <span>
+                <h2>Business Details</h2>
+                <p>Public details displayed on your checkout pages</p>
+              </span>
+            </div>
+            <form id="settings-form" onsubmit="event.preventDefault(); saveSettings();" class="setting">
+              <label>
+                Business / Store Display Name
+                <input id="business-name" placeholder="e.g. Acme Studio" required>
+              </label>
+              <label>
+                Customer Support Email
+                <input id="support-email" type="email" placeholder="support@acme.com">
+              </label>
+              <label>
+                Contact Mobile / WhatsApp Number
+                <input id="whatsapp-number" type="tel" maxlength="10" placeholder="10-digit mobile number">
+                <span class="input-hint">Used for merchant contact and WhatsApp notification alerts</span>
+              </label>
+              <label>
+                Business Description / Bio
+                <textarea id="business-description" rows="3" placeholder="Brief description for customer receipts"></textarea>
+              </label>
+              <div>
+                <button class="primary" id="save-settings-btn" type="submit">Save Profile Changes</button>
+              </div>
+            </form>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <span>
+                <h2>Account Security</h2>
+                <p>Authenticated session and credentials</p>
+              </span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:16px;font-size:13px">
+              <div>
+                <span style="color:var(--muted);display:block;font-size:11px;text-transform:uppercase;font-weight:700;letter-spacing:0.7px;margin-bottom:4px">Account Email</span>
+                <strong id="sec-email" style="font-size:14px;color:#FFFFFF">—</strong>
+              </div>
+              <div>
+                <span style="color:var(--muted);display:block;font-size:11px;text-transform:uppercase;font-weight:700;letter-spacing:0.7px;margin-bottom:4px">Merchant ID</span>
+                <code id="sec-id" style="font-size:12px;color:#818CF8;font-family:monospace">—</code>
+              </div>
+              <div>
+                <span style="color:var(--muted);display:block;font-size:11px;text-transform:uppercase;font-weight:700;letter-spacing:0.7px;margin-bottom:4px">Member Since</span>
+                <span id="sec-created" style="color:#FFFFFF">—</span>
+              </div>
+            </div>
+            <div style="margin-top:24px;border-top:1px solid var(--line);padding-top:16px;display:flex;gap:10px">
+              <button class="btn btn-outline" onclick="modal('help-modal', true)">Help Center</button>
+              <button class="btn btn-danger" onclick="logout()">Sign Out</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+    </div><!-- /.page-container -->
+  </main>
+</div><!-- /#app-shell -->
+
+<!-- ═══════════════════════════════════════
+     MODALS
+════════════════════════════════════════ -->
+
+<!-- Modal 1: Add / Edit UPI Account -->
+<div class="backdrop" id="upi-modal">
+  <div class="modal" style="max-width:440px">
+    <button class="close">×</button>
+    <p class="eyebrow">RECEIVING DESTINATION</p>
+    <h2 id="upi-modal-title">Connect UPI Account</h2>
+    <p>Enter your UPI VPA handle and your registered 10-digit mobile number.</p>
+    <form id="upi-form">
+      <input type="hidden" id="upi-edit-id">
+      <label>
+        UPI ID (VPA)
+        <input id="upi-modal-vpa" placeholder="e.g. storename@okaxis or merchant@icici" required autocomplete="off">
+        <span class="input-hint">Format: name@bank (e.g. store@okaxis, business@upi)</span>
+      </label>
+      <label>
+        Registered Mobile Number
+        <input id="upi-modal-phone" type="tel" maxlength="10" placeholder="e.g. 9876543210" required autocomplete="tel">
+        <span class="input-hint">Must be the 10-digit mobile number linked to your bank</span>
+      </label>
+      <div style="display:flex;align-items:center;gap:8px;margin:4px 0 2px">
+        <input type="checkbox" id="upi-modal-default" style="width:auto;accent-color:#818CF8">
+        <label for="upi-modal-default" style="margin:0;font-size:13px;cursor:pointer;font-weight:500">Set as primary receiving UPI account</label>
+      </div>
+      <button class="primary submit" type="submit" id="upi-submit-btn">Connect UPI Account →</button>
+    </form>
+  </div>
+</div>
+
+<!-- Modal 2: Create Payment Link -->
+<div class="backdrop" id="link-modal">
+  <div class="modal" style="max-width:480px">
+    <button class="close">×</button>
+    <p class="eyebrow">NEW PAYMENT LINK</p>
+    <h2>Create Payment Link</h2>
+    <p>Generate a shareable checkout link and dynamic scannable QR code.</p>
+    <form id="link-form">
+      <label>
+        What are you collecting for?
+        <input id="link-name" required placeholder="e.g. Handcrafted Leather Bag / Consultation">
+        <span class="input-hint">Displayed prominently on your customer checkout page</span>
+      </label>
+      <label>
+        Pricing Type
+        <div class="type-selector-group">
+          <button type="button" class="type-option-btn active" id="btn-type-fixed" onclick="setLinkPricingType('fixed')">
+            <span>● Fixed Price</span>
+          </button>
+          <button type="button" class="type-option-btn" id="btn-type-open" onclick="setLinkPricingType('open')">
+            <span>○ Customer Decides</span>
+          </button>
+        </div>
+        <input type="hidden" id="link-type" value="fixed">
+      </label>
+      <label id="link-amount-wrap">
+        Amount (₹)
+        <input id="link-amount" type="number" min="1" placeholder="499">
+        <span class="input-hint">Preset amount charged to customer</span>
+      </label>
+      <label>
+        Custom URL Slug
+        <div class="slug-input-wrapper">
+          <span class="slug-domain-prefix" id="slug-prefix-label">sakkupay.in/pay/</span>
+          <input class="slug-field-input" id="link-slug" placeholder="custom-slug" required>
+        </div>
+        <span class="input-hint">Lowercase letters, numbers, and dashes only</span>
+      </label>
+      <label>
+        Receiving UPI Account
+        <select id="link-upi-select"></select>
+        <span class="input-hint">Direct credit to your connected bank</span>
+      </label>
+      <button class="primary submit" type="submit" id="link-submit-btn">Generate Payment Link &amp; QR →</button>
+    </form>
+  </div>
+</div>
+
+<!-- Modal 3: QR Code / Share -->
+<div class="backdrop" id="qr-modal">
+  <div class="modal" style="max-width:440px;text-align:center">
+    <button class="close">×</button>
+    <p class="eyebrow">SHARE PAYMENT LINK</p>
+    <h2 id="qr-modal-title">Ready to Receive Payments</h2>
+    <p id="qr-modal-sub" style="margin-bottom:16px">Scan with Google Pay, PhonePe, Paytm, or share the checkout link.</p>
+    <div style="background:var(--card-inner);border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column;align-items:center;margin-bottom:18px">
+      <div id="modal-qrcode" style="background:#FFFFFF;padding:12px;border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,0.4)"></div>
+      <div style="margin-top:12px">
+        <span class="pill success" id="qr-modal-amount-pill"><span class="dot"></span> Ready</span>
+      </div>
+      <button class="btn btn-sm btn-outline" id="modal-download-qr-btn" style="margin-top:12px">⇩ Download QR Code</button>
+    </div>
+    <div style="text-align:left;margin-bottom:18px">
+      <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;display:block;margin-bottom:6px">Shareable Customer Checkout URL</label>
+      <div style="display:flex;gap:8px">
+        <input id="qr-modal-url" readonly style="flex:1;background:var(--card-inner);border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:13px;color:#FFFFFF;outline:none">
+        <button class="primary" id="qr-modal-copy-btn" style="padding:9px 14px;font-size:13px;border-radius:8px">Copy Link</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <a id="qr-modal-open-link" target="_blank" class="btn btn-outline" style="flex:1;text-decoration:none;text-align:center;padding:10px 16px">Open Checkout Page ↗</a>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 4: New API Key -->
+<div class="backdrop" id="api-key-modal">
+  <div class="modal" style="max-width:460px">
+    <button class="close">×</button>
+    <p class="eyebrow">NEW API KEY GENERATED</p>
+    <h2>Save Your API Key</h2>
+    <p>Copy this key now. For your security, you will not be able to view it again.</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--card-inner);padding:12px 14px;border-radius:8px;border:1px solid var(--line);margin-top:16px;gap:12px">
+      <code id="new-key-display" style="font-family:monospace;font-size:13px;color:#818CF8;word-break:break-all;flex:1">sk_live_…</code>
+      <button class="primary" id="copy-new-key-btn" style="flex-shrink:0;padding:8px 14px;font-size:12px;border-radius:8px">Copy Key</button>
+    </div>
+    <div style="margin-top:14px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:#FBBF24;padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.5">
+      ⚠️ Keep this key confidential. Never expose it in client-side code or public repositories.
+    </div>
+  </div>
+</div>
+
+<!-- Modal 5: Help Center -->
+<div class="backdrop" id="help-modal">
+  <div class="modal" style="max-width:540px">
+    <button class="close">×</button>
+    <p class="eyebrow">HELP &amp; SUPPORT</p>
+    <h2>Help Center</h2>
+    <p>Everything you need to know about using SakkuPay to collect UPI payments.</p>
+    <div class="faq-list" style="margin-top:20px">
+      <details class="faq-item" open>
+        <summary>How do SakkuPay payment links work?</summary>
+        <p>When you create a link, SakkuPay provides a shareable URL (sakkupay.in/pay/your-slug). When customers open it, they can pay using any UPI app (Google Pay, PhonePe, Paytm, BHIM) or by scanning the dynamically generated QR code directly to your bank account.</p>
+      </details>
+      <details class="faq-item">
+        <summary>How does the Android Companion App verify payments?</summary>
+        <p>The companion app listens for standard incoming notification alerts from PhonePe Business, Google Pay for Business, Paytm Business, and bank SMS, and automatically posts the UTR and amount to your webhook endpoint to reconcile pending transactions instantly.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Why is a 10-digit mobile number required?</summary>
+        <p>Your registered mobile number binds your UPI VPA to your merchant account for transparency, helps prevent impersonation, and enables our team to assist you promptly.</p>
+      </details>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:20px;border-top:1px solid var(--line);padding-top:16px">
+      <div>
+        <strong style="display:block;color:#FFFFFF;font-size:13px">Technical Support:</strong>
+        <a href="mailto:support@sakkupay.in" style="color:#818CF8;text-decoration:none;font-size:12.5px">support@sakkupay.in</a>
+      </div>
+      <div>
+        <strong style="display:block;color:#FFFFFF;font-size:13px">API Documentation:</strong>
+        <a href="javascript:void(0)" onclick="modal('help-modal', false); go('developers');" style="color:#818CF8;text-decoration:none;font-size:12.5px">Developer Reference →</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 6: Transaction Forensics & Lifecycle Detail Drawer -->
+<div class="backdrop" id="tx-detail-modal">
+  <div class="modal modal-drawer" style="max-width:540px;width:100%">
+    <button class="close">×</button>
+    <div class="drawer-header">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="drawer-icon">▣</span>
+        <div>
+          <p class="eyebrow" style="margin:0;font-size:10.5px">TRANSACTION FORENSICS</p>
+          <h2 id="dtl-ref" style="font-family:monospace;margin:0;font-size:18px;color:#FFFFFF">SP...</h2>
+        </div>
+      </div>
+      <button class="btn btn-sm btn-outline" id="dtl-copy-ref-btn" style="padding:4px 10px;font-size:11px">Copy Ref</button>
+    </div>
+
+    <!-- Status & Reconciliation badges -->
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:16px 0;align-items:center">
+      <span id="dtl-status-pill"></span>
+      <span id="dtl-recon-pill"></span>
+    </div>
+
+    <!-- Ambiguity Alert Box (shown only if ambiguity or discrepancy) -->
+    <div id="dtl-ambiguity-box" style="display:none;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:#FBBF24;padding:12px 14px;border-radius:10px;font-size:12.5px;margin-bottom:16px;line-height:1.5">
+      <strong style="display:block;margin-bottom:3px">⚠️ Reconciliation Notice</strong>
+      <span id="dtl-ambiguity-msg"></span>
+    </div>
+
+    <!-- Key Metrics Grid -->
+    <div class="drawer-stats-grid">
+      <div class="drawer-stat-item">
+        <label>Total Amount</label>
+        <strong id="dtl-amount" style="color:#10B981;font-size:20px">₹0</strong>
+        <small id="dtl-paise" style="color:var(--muted);font-family:monospace">0 paise</small>
+      </div>
+      <div class="drawer-stat-item">
+        <label>UTR / Bank Reference</label>
+        <div style="display:flex;align-items:center;gap:6px">
+          <code id="dtl-utr" style="font-family:monospace;font-size:12.5px;color:#F8FAFC;word-break:break-all">—</code>
+          <button class="btn btn-sm btn-outline" id="dtl-copy-utr-btn" style="padding:2px 8px;font-size:11px">Copy</button>
+        </div>
+        <small id="dtl-utr-status" style="color:var(--muted)">Bank confirmed</small>
+      </div>
+    </div>
+
+    <!-- Details Table -->
+    <div class="drawer-details-list">
+      <div class="drawer-row">
+        <span>Customer Name</span>
+        <strong id="dtl-customer-name">—</strong>
+      </div>
+      <div class="drawer-row">
+        <span>Customer Contact</span>
+        <span id="dtl-customer-contact" style="font-family:monospace">—</span>
+      </div>
+      <div class="drawer-row">
+        <span>Customer UPI VPA</span>
+        <span id="dtl-customer-upi" style="font-family:monospace">—</span>
+      </div>
+      <div class="drawer-row">
+        <span>Verification Source</span>
+        <span id="dtl-verified-by">—</span>
+      </div>
+      <div class="drawer-row">
+        <span>Created Date &amp; Time</span>
+        <span id="dtl-created-at">—</span>
+      </div>
+      <div class="drawer-row" id="dtl-paid-row">
+        <span>Payment Settlement Time</span>
+        <span id="dtl-paid-at">—</span>
+      </div>
+      <div class="drawer-row" id="dtl-utr-sub-row">
+        <span>Customer Submitted UTR</span>
+        <span id="dtl-utr-sub-at">—</span>
+      </div>
+    </div>
+
+    <!-- Merchant Internal Note -->
+    <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:16px">
+      <label style="font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;display:block;margin-bottom:6px">Internal Merchant Note</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="dtl-merchant-note-input" placeholder="Add order ID, courier tracking, or internal fulfillment note…" style="flex:1;background:var(--card-inner);border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:13px;color:#FFFFFF;outline:none">
+        <button class="primary" id="dtl-save-note-btn" style="padding:9px 16px;font-size:12px;border-radius:8px">Save Note</button>
+      </div>
+      <small style="color:var(--muted);font-size:11px;margin-top:4px;display:block">Notes are strictly private to your merchant account and never shown to customers.</small>
+    </div>
+
+    <!-- Direct link button -->
+    <div style="display:flex;gap:10px;margin-top:20px;border-top:1px solid var(--line);padding-top:16px">
+      <a id="dtl-checkout-link" target="_blank" class="btn btn-outline" style="flex:1;text-decoration:none;text-align:center;padding:10px 14px;font-size:13px">Open Checkout Page ↗</a>
+      <button class="btn btn-outline close" style="padding:10px 16px">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="app-live.js"></script>
+</body>
+</html>

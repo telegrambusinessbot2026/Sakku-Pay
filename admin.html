@@ -1,0 +1,965 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>SakkuPay Admin Control Center</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/logo-icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     LOGIN OVERLAY
+════════════════════════════════════════════════════════════════ -->
+<div class="auth-overlay" id="auth-overlay">
+  <div class="auth-card">
+    <div class="brand" style="display:flex;align-items:center;gap:10px;margin-bottom:16px;justify-content:center">
+      <img src="/assets/logo.svg" alt="SakkuPay" style="height:36px;width:auto">
+      <span class="role-pill pill-superadmin">CONTROL CENTER</span>
+    </div>
+    <h1>Admin Sign In</h1>
+    <p>Authenticate with administrative credentials to access the SakkuPay operations control center.</p>
+    <form id="login-form">
+      <div class="field">
+        <label for="login-user">Admin Email or Username</label>
+        <input id="login-user" type="text" autocomplete="username" required placeholder="admin@sakkupay.local or admin">
+      </div>
+      <div class="field">
+        <label for="login-pass">Password</label>
+        <input id="login-pass" type="password" autocomplete="current-password" required placeholder="••••••••••••">
+      </div>
+      <div class="auth-error" id="login-error"></div>
+      <button class="btn btn-primary" type="submit" id="login-submit-btn" style="width:100%;padding:12px;font-weight:700">Authenticate →</button>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     CONFIRM DIALOG MODAL
+════════════════════════════════════════════════════════════════ -->
+<div class="confirm-overlay hidden" id="confirm-overlay">
+  <div class="confirm-box">
+    <h3 id="confirm-title">Are you sure?</h3>
+    <p id="confirm-msg">This action cannot be undone.</p>
+    <div class="confirm-actions">
+      <button class="btn btn-outline" id="confirm-cancel">Cancel</button>
+      <button class="btn btn-danger" id="confirm-ok">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     ADMIN APP SHELL
+════════════════════════════════════════════════════════════════ -->
+<div class="admin-shell">
+
+  <!-- Sidebar -->
+  <aside class="admin-sidebar">
+    <div class="brand" style="display:flex;align-items:center;gap:10px;padding:8px 0 16px">
+      <img src="/assets/logo.svg" alt="SakkuPay" style="height:34px;width:auto">
+      <span class="role-pill pill-superadmin" id="sidebar-role-badge">SUPERADMIN</span>
+    </div>
+
+    <div class="sidebar-user-card" id="sidebar-user-card">
+      <div class="user-avatar" id="admin-avatar">AD</div>
+      <div class="user-info">
+        <strong id="admin-display-name">Administrator</strong>
+        <small id="admin-display-role">SuperAdmin</small>
+      </div>
+    </div>
+
+    <div class="sidebar-label">Platform Operations</div>
+    <nav>
+      <button class="nav-item active" data-page="overview">
+        <span class="icon">⌘</span> Overview &amp; Health
+      </button>
+      <button class="nav-item" data-page="merchants">
+        <span class="icon">👥</span> Merchants
+      </button>
+      <button class="nav-item" data-page="transactions">
+        <span class="icon">▣</span> Platform Ledger
+      </button>
+      <button class="nav-item" data-page="investigation">
+        <span class="icon">🔎</span> Investigation
+      </button>
+      <button class="nav-item" data-page="audit" id="nav-audit">
+        <span class="icon">📜</span> Audit Trail
+      </button>
+      <button class="nav-item" data-page="staff" id="nav-staff">
+        <span class="icon">🛡️</span> Staff &amp; RBAC
+      </button>
+      <button class="nav-item" data-page="errors" id="nav-errors">
+        <span class="icon">⚠</span> Diagnostics
+      </button>
+      <button class="nav-item" data-page="whatsapp" id="nav-whatsapp">
+        <span class="icon">💬</span> WhatsApp
+      </button>
+    </nav>
+
+    <div class="side-end">
+      <div class="system-status-indicator">
+        <span class="dot dot-green"></span>
+        <span>SQLite WAL Engine Active</span>
+      </div>
+      <button class="logout-btn" id="logout-btn">⬡ Sign out</button>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <div class="admin-main">
+    <header class="admin-header">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="mobile-toggle" onclick="document.querySelector('.admin-sidebar')?.classList.toggle('open')" title="Toggle navigation">☰</button>
+        <span class="crumb">SakkuPay Control Center <em>/</em> <b id="page-title">Overview &amp; Health</b></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <span class="header-tag" id="header-role-tag">Role: SuperAdmin</span>
+        <span style="font-size:12px;color:var(--muted)" id="last-refresh">—</span>
+      </div>
+    </header>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PAGE 1: OVERVIEW & PLATFORM HEALTH
+    ────────────────────────────────────────────────────────────── -->
+    <section class="page active" id="page-overview">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">PLATFORM GOVERNANCE</p>
+          <h1>Overview &amp; Health</h1>
+          <p>Real-time financial analytics, SQLite database status, and system health metrics.</p>
+        </div>
+        <button class="btn btn-outline" onclick="loadOverview()">↻ Refresh</button>
+      </div>
+
+      <!-- Stat Grid -->
+      <div class="stat-grid" id="stat-grid">
+        <div class="stat-card violet">
+          <div class="stat-label">Total Platform Volume</div>
+          <div class="stat-value" id="s-volume">₹0</div>
+          <div class="stat-sub"><span id="s-volume-paise">0 paise</span> confirmed</div>
+        </div>
+        <div class="stat-card blue">
+          <div class="stat-label">Total Transactions</div>
+          <div class="stat-value" id="s-tx">0</div>
+          <div class="stat-sub"><span id="s-tx-success">0</span> successfully settled</div>
+        </div>
+        <div class="stat-card green">
+          <div class="stat-label">Registered Merchants</div>
+          <div class="stat-value" id="s-merchants">0</div>
+          <div class="stat-sub"><span id="s-suspended">0</span> suspended</div>
+        </div>
+        <div class="stat-card orange">
+          <div class="stat-label">Payment Links</div>
+          <div class="stat-value" id="s-links">0</div>
+          <div class="stat-sub"><span id="s-total-links">0</span> total links created</div>
+        </div>
+      </div>
+
+      <!-- Health & Architecture Panel -->
+      <div class="panel" style="margin-bottom:24px">
+        <div class="panel-head">
+          <div>
+            <p class="panel-title">Database Engine &amp; Architecture Health</p>
+            <p class="panel-sub">Authoritative SQLite WAL state, foreign key integrity, and table record counts</p>
+          </div>
+          <span class="badge badge-active" id="db-health-badge">● HEALTHY</span>
+        </div>
+        <div class="health-grid" id="health-grid">
+          <div class="health-card">
+            <span class="health-label">Database Engine</span>
+            <strong class="health-val" id="h-engine">SQLite (better-sqlite3)</strong>
+            <small class="health-sub">Local persistence with WAL</small>
+          </div>
+          <div class="health-card">
+            <span class="health-label">Journal Mode</span>
+            <strong class="health-val text-success" id="h-journal">wal</strong>
+            <small class="health-sub">PRAGMA journal_mode = WAL</small>
+          </div>
+          <div class="health-card">
+            <span class="health-label">Foreign Keys</span>
+            <strong class="health-val text-success" id="h-fk">Enforced (1)</strong>
+            <small class="health-sub">Cascades active</small>
+          </div>
+          <div class="health-card">
+            <span class="health-label">Busy Timeout</span>
+            <strong class="health-val text-primary" id="h-timeout">5000 ms</strong>
+            <small class="health-sub">Concurrency lock buffer</small>
+          </div>
+          <div class="health-card">
+            <span class="health-label">Process Memory (RSS)</span>
+            <strong class="health-val" id="h-memory">— MB</strong>
+            <small class="health-sub" id="h-heap">Heap: — MB</small>
+          </div>
+          <div class="health-card">
+            <span class="health-label">Process Uptime</span>
+            <strong class="health-val" id="h-uptime">—</strong>
+            <small class="health-sub" id="h-node">Node: —</small>
+          </div>
+        </div>
+
+        <!-- Table counts breakdown -->
+        <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
+          <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;display:block;margin-bottom:10px">Live Database Table Counts</span>
+          <div class="table-counts-pills" id="table-counts-pills">
+            <span class="count-pill">Merchants: <b id="cnt-merchants">0</b></span>
+            <span class="count-pill">Transactions: <b id="cnt-transactions">0</b></span>
+            <span class="count-pill">Links: <b id="cnt-links">0</b></span>
+            <span class="count-pill">UPIs: <b id="cnt-upis">0</b></span>
+            <span class="count-pill">Admin Users: <b id="cnt-admins">0</b></span>
+            <span class="count-pill">Audit Trail: <b id="cnt-audit">0</b></span>
+            <span class="count-pill">Errors: <b id="cnt-errors">0</b></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity Feed -->
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-title">Recent Platform Activity</p>
+            <p class="panel-sub">Latest customer transactions streaming across all merchant links</p>
+          </div>
+          <button class="btn btn-sm btn-outline" onclick="navigate('transactions')">View All Ledger →</button>
+        </div>
+        <div id="activity-feed"><div class="loading">Loading recent transactions…</div></div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PAGE 2: MERCHANTS DIRECTORY
+    ────────────────────────────────────────────────────────────── -->
+    <section class="page" id="page-merchants">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">MERCHANT DIRECTORY</p>
+          <h1>Merchants</h1>
+          <p>Inspect registered merchant accounts, check volumes, audit suspensions, and review linked destinations.</p>
+        </div>
+        <button class="btn btn-outline" onclick="loadUsers()">↻ Refresh</button>
+      </div>
+
+      <div class="panel">
+        <div class="filters">
+          <div class="search-wrap">
+            ⌕ <input id="user-search" placeholder="Search by merchant email, business, phone, or UPI…" oninput="filterUsers()">
+          </div>
+          <select class="filter-select" id="user-status-filter" onchange="filterUsers()">
+            <option value="all">All statuses</option>
+            <option value="active">Active merchants only</option>
+            <option value="suspended">Suspended merchants only</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>MERCHANT</th>
+                <th>BUSINESS &amp; PRIMARY UPI</th>
+                <th style="text-align:center">UPIS</th>
+                <th style="text-align:center">LINKS</th>
+                <th style="text-align:center">TXS</th>
+                <th>TOTAL VOLUME</th>
+                <th>STATUS</th>
+                <th>JOINED</th>
+                <th>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody id="user-tbody">
+              <tr><td colspan="9" class="loading">Loading merchant directory…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PAGE 3: GLOBAL TRANSACTIONS LEDGER
+    ────────────────────────────────────────────────────────────── -->
+    <section class="page" id="page-transactions">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">SETTLEMENT LEDGER</p>
+          <h1>Platform Transactions</h1>
+          <p>Real-time transaction tracking across all platform merchants with reconciliation states.</p>
+        </div>
+        <button class="btn btn-outline" onclick="loadTransactions()">↻ Refresh</button>
+      </div>
+
+      <div class="panel">
+        <div class="filters">
+          <div class="search-wrap">
+            ⌕ <input id="tx-search" placeholder="Search by reference ID, customer, UTR…" oninput="filterTransactions()">
+          </div>
+          <select class="filter-select" id="tx-status-filter" onchange="filterTransactions()">
+            <option value="all">All statuses</option>
+            <option value="success">Settled / Success</option>
+            <option value="pending">Pending</option>
+            <option value="failed">Failed</option>
+          </select>
+          <select class="filter-select" id="tx-merchant-filter" onchange="filterTransactions()">
+            <option value="">All merchants</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>REFERENCE</th>
+                <th>MERCHANT</th>
+                <th>CUSTOMER</th>
+                <th>AMOUNT</th>
+                <th>STATUS</th>
+                <th>RECONCILIATION</th>
+                <th>DATE</th>
+                <th>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody id="tx-tbody">
+              <tr><td colspan="8" class="loading">Loading platform transactions…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PAGE 4: PAYMENT INVESTIGATION WORKSPACE
+    ────────────────────────────────────────────────────────────── -->
+    <section class="page" id="page-investigation">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">FORENSIC AUDITING</p>
+          <h1>Payment Investigation Workspace</h1>
+          <p>Multi-attribute search, ambiguous collision triage, chronological timelines, and safe manual reconciliation.</p>
+        </div>
+        <button class="btn btn-outline" onclick="runInvestigationSearch()">↻ Refresh</button>
+      </div>
+
+      <!-- Investigation Filter Box -->
+      <div class="panel" style="margin-bottom:20px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:14px">
+          <div>
+            <label class="field-label">General Query (Ref / Customer / ID)</label>
+            <input type="text" id="inv-query" placeholder="SP... / Customer name / tx_..." class="filter-input">
+          </div>
+          <div>
+            <label class="field-label">UTR / Bank Reference</label>
+            <input type="text" id="inv-utr" placeholder="12-digit bank UTR" class="filter-input">
+          </div>
+          <div>
+            <label class="field-label">Gateway Provider Reference</label>
+            <input type="text" id="inv-prov-ref" placeholder="Provider ref ID" class="filter-input">
+          </div>
+          <div>
+            <label class="field-label">Reconciliation Status</label>
+            <select id="inv-recon-filter" class="filter-select" style="width:100%">
+              <option value="all">All Reconciliation States</option>
+              <option value="flagged_ambiguous">⚠️ Flagged Ambiguous / Collisions</option>
+              <option value="unverified_evidence">⏱ Unverified Customer Evidence</option>
+              <option value="settled">✓ Settled</option>
+              <option value="unreconciled">Unreconciled</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div class="chip-group">
+            <button class="chip" onclick="applyInvQuickFilter('all')">All</button>
+            <button class="chip chip-warn" onclick="applyInvQuickFilter('flagged_ambiguous')">⚠️ Ambiguous Collisions</button>
+            <button class="chip chip-info" onclick="applyInvQuickFilter('unverified_evidence')">⏱ Unverified Evidence</button>
+          </div>
+          <button class="btn btn-primary" onclick="runInvestigationSearch()" style="padding:8px 20px">Search Investigation Workspace →</button>
+        </div>
+      </div>
+
+      <!-- Investigation Results Table -->
+      <div class="panel">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>REFERENCE</th>
+                <th>MERCHANT</th>
+                <th>CUSTOMER</th>
+                <th>AMOUNT</th>
+                <th>STATUS</th>
+                <th>RECONCILIATION</th>
+                <th>UTR NUMBER</th>
+                <th>DATE</th>
+                <th>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody id="inv-tbody">
+              <tr><td colspan="9" class="loading">Loading investigation workspace…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PAGE 5: APPEND-ONLY ADMINISTRATIVE AUDIT TRAIL
+    ────────────────────────────────────────────────────────────── -->
+    <section class="page" id="page-audit">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">IMMUTABLE OPERATIONS LEDGER</p>
+          <h1>Administrative Audit Trail</h1>
+          <p>Chronological, append-only record of all administrative operations, logins, suspensions, and manual reconciliations.</p>
+        </div>
+        <button class="btn btn-outline" onclick="loadAuditTrail()">↻ Refresh</button>
+      </div>
+
+      <div class="audit-banner">
+        🔒 <strong>Engine-Enforced Immutability:</strong> The <code>admin_audit_trail</code> table is protected by SQLite database triggers <code>prevent_admin_audit_update</code> and <code>prevent_admin_audit_delete</code>. Direct SQL updates and deletions are strictly aborted.
+      </div>
+
+      <div class="panel">
+        <div class="filters">
+          <div class="search-wrap">
+            ⌕ <input id="audit-action-filter" placeholder="Filter by action (e.g. reconcile, suspend, login)…" oninput="loadAuditTrail()">
+          </div>
+          <select class="filter-select" id="audit-outcome-filter" onchange="loadAuditTrail()">
+            <option value="all">All Outcomes</option>
+            <option value="success">Success</option>
+            <option value="failed">Failed</option>
+            <option value="denied">Denied / Forbidden</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>TIMESTAMP</th>
+                <th>ACTOR</th>
+                <th>ACTION</th>
+                <th>TARGET</th>
+                <th>REASON CODE</th>
+                <th>JUSTIFICATION</th>
+                <th>OUTCOME</th>
+                <th>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody id="audit-tbody">
+              <tr><td colspan="8" class="loading">Loading audit trail…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PAGE 6: STAFF MANAGEMENT & ROLE-BASED ACCESS CONTROL (RBAC)
+    ────────────────────────────────────────────────────────────── -->
+    <section class="page" id="page-staff">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">ACCESS GOVERNANCE</p>
+          <h1>Staff &amp; Role-Based Access Control</h1>
+          <p>Manage administrative personnel, assign roles, enforce least-privilege security, and inspect role capabilities.</p>
+        </div>
+        <button class="btn btn-primary" onclick="openStaffModal()">+ Add Staff Member</button>
+      </div>
+
+      <!-- Staff List Panel -->
+      <div class="panel" style="margin-bottom:24px">
+        <div class="panel-head">
+          <div>
+            <p class="panel-title">Administrative Personnel</p>
+            <p class="panel-sub">Users with server-verified credentials in <code>admin_users</code></p>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="loadStaffUsers()">↻ Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>NAME &amp; EMAIL</th>
+                <th>ROLE</th>
+                <th>STATUS</th>
+                <th>CREATED</th>
+                <th>LAST LOGIN</th>
+                <th>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody id="staff-tbody">
+              <tr><td colspan="6" class="loading">Loading staff accounts…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Role Permission Matrix Panel -->
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-title">Role Permissions Reference Sheet</p>
+            <p class="panel-sub">Enforced at the server router level on every incoming request</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table rbac-matrix-table">
+            <thead>
+              <tr>
+                <th>CAPABILITY</th>
+                <th style="text-align:center">SUPERADMIN</th>
+                <th style="text-align:center">OPERATIONSSUPPORT</th>
+                <th style="text-align:center">COMPLIANCEAUDITOR</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Staff &amp; User Governance</b> (<code>admin.users.write</code>)</td>
+                <td style="text-align:center;color:#34D399">✓ Full Access</td>
+                <td style="text-align:center;color:#F87171">✗ Denied</td>
+                <td style="text-align:center;color:#F87171">✗ Denied</td>
+              </tr>
+              <tr>
+                <td><b>Audit Trail Inspection</b> (<code>audit.read</code>)</td>
+                <td style="text-align:center;color:#34D399">✓ Full Access</td>
+                <td style="text-align:center;color:#F87171">✗ Denied</td>
+                <td style="text-align:center;color:#34D399">✓ Read-Only</td>
+              </tr>
+              <tr>
+                <td><b>Manual Reconciliation</b> (<code>transactions.reconcile</code>)</td>
+                <td style="text-align:center;color:#34D399">✓ Full Access</td>
+                <td style="text-align:center;color:#34D399">✓ Audited Access</td>
+                <td style="text-align:center;color:#F87171">✗ Denied</td>
+              </tr>
+              <tr>
+                <td><b>Merchant Operations &amp; Suspension</b> (<code>merchants.write</code>)</td>
+                <td style="text-align:center;color:#34D399">✓ Full Access</td>
+                <td style="text-align:center;color:#F87171">✗ Denied</td>
+                <td style="text-align:center;color:#F87171">✗ Denied</td>
+              </tr>
+              <tr>
+                <td><b>Payment Investigation Workspace</b> (<code>transactions.investigate</code>)</td>
+                <td style="text-align:center;color:#34D399">✓ Full Access</td>
+                <td style="text-align:center;color:#34D399">✓ Full Access</td>
+                <td style="text-align:center;color:#34D399">✓ Read-Only</td>
+              </tr>
+              <tr>
+                <td><b>WhatsApp Gateway Bridge</b> (<code>system.whatsapp.manage</code>)</td>
+                <td style="text-align:center;color:#34D399">✓ Full Access</td>
+                <td style="text-align:center;color:#F87171">✗ Denied</td>
+                <td style="text-align:center;color:#F87171">✗ Denied</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PAGE 7: DIAGNOSTICS & CLIENT ERROR LOGS
+    ────────────────────────────────────────────────────────────── -->
+    <section class="page" id="page-errors">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">SYSTEM DIAGNOSTICS</p>
+          <h1>Error Logs</h1>
+          <p>Client-side telemetry reported by merchant browsers and checkout sessions.</p>
+        </div>
+        <button class="btn btn-danger" id="clear-errors-btn" onclick="clearErrors()">🗑 Clear all</button>
+      </div>
+
+      <div class="panel">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>TIME</th>
+                <th>MERCHANT</th>
+                <th>MESSAGE</th>
+                <th>URL</th>
+                <th>LINE</th>
+              </tr>
+            </thead>
+            <tbody id="err-tbody">
+              <tr><td colspan="5" class="loading">Loading error telemetry…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PAGE 8: WHATSAPP INTEGRATION
+    ────────────────────────────────────────────────────────────── -->
+    <section class="page" id="page-whatsapp">
+      <div class="page-header">
+        <div>
+          <p class="eyebrow">MESSAGING INFRASTRUCTURE</p>
+          <h1>WhatsApp Gateway</h1>
+          <p>Scan QR to link administrative WhatsApp session for automated merchant messaging.</p>
+        </div>
+      </div>
+
+      <div class="wa-grid">
+        <div class="panel">
+          <div class="panel-head">
+            <div><p class="panel-title">Connection Status</p><p class="panel-sub">Scan QR to connect WhatsApp Web</p></div>
+          </div>
+          <div class="qr-box" id="qr-box">
+            <div class="qr-placeholder">💬</div>
+            <p id="qr-hint">Click "Connect WhatsApp" to initialize session</p>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:16px">
+            <button class="btn btn-primary" id="wa-connect-btn" onclick="waConnect()" style="flex:1">Connect WhatsApp</button>
+            <button class="btn btn-danger" id="wa-disconnect-btn" onclick="waDisconnect()" style="display:none;flex:1">Disconnect</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div><p class="panel-title">Diagnostic Telemetry</p><p class="panel-sub">Verify Baileys library and session status</p></div>
+          </div>
+          <div id="wa-status-rows">
+            <div class="wa-info-row"><span class="wa-info-label">Bridge Status</span><span class="wa-status"><span class="dot dot-grey" id="wa-dot"></span><span id="wa-status-text">Checking…</span></span></div>
+            <div class="wa-info-row"><span class="wa-info-label">Phone Number</span><span id="wa-phone-text" style="font-size:13px;font-weight:600">—</span></div>
+            <div class="wa-info-row"><span class="wa-info-label">Baileys Library</span><span id="wa-available-text" style="font-size:12.5px">Checking…</span></div>
+          </div>
+          <div class="send-form" id="wa-send-form" style="display:none;margin-top:16px">
+            <div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:6px">Send Test WhatsApp Message</div>
+            <input id="wa-to" placeholder="Recipient 10-digit mobile (e.g. 9876543210)" maxlength="15" class="filter-input" style="margin-bottom:8px">
+            <textarea id="wa-msg" placeholder="Test notification message…" class="filter-input" rows="3" style="margin-bottom:8px"></textarea>
+            <button class="btn btn-success" onclick="waSend()">Send Message →</button>
+          </div>
+          <div id="wa-install-note" style="display:none;margin-top:18px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:14px;font-size:12.5px;color:#FBBF24;line-height:1.6">
+            <b>WhatsApp integration module is optional.</b> To enable personal WhatsApp alerts, install Baileys:<br>
+            <code style="display:inline-block;margin-top:6px;background:rgba(0,0,0,0.4);border-radius:6px;padding:4px 8px;font-family:monospace;color:#FFFFFF">pnpm add @whiskeysockets/baileys</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /.admin-main -->
+</div><!-- /.admin-shell -->
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODAL: MERCHANT DETAIL DRAWER
+════════════════════════════════════════════════════════════════ -->
+<div class="backdrop" id="merchant-drawer">
+  <div class="modal modal-drawer" style="max-width:620px;width:100%">
+    <button class="close">×</button>
+    <div class="drawer-header">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="drawer-icon">👤</span>
+        <div>
+          <p class="eyebrow" style="margin:0;font-size:10.5px">MERCHANT PROFILE</p>
+          <h2 id="mdtl-biz-name" style="margin:0;font-size:18px;color:#FFFFFF">Merchant Store</h2>
+        </div>
+      </div>
+      <span id="mdtl-status-badge"></span>
+    </div>
+
+    <!-- Merchant Details Card -->
+    <div class="drawer-stats-grid" style="margin:16px 0">
+      <div class="drawer-stat-item">
+        <label>Merchant ID</label>
+        <code id="mdtl-id" style="font-family:monospace;font-size:12px;color:#818CF8">—</code>
+      </div>
+      <div class="drawer-stat-item">
+        <label>Primary Email</label>
+        <strong id="mdtl-email" style="font-size:13px">—</strong>
+      </div>
+      <div class="drawer-stat-item">
+        <label>Contact Phone</label>
+        <span id="mdtl-phone" style="font-family:monospace;font-size:13px">—</span>
+      </div>
+      <div class="drawer-stat-item">
+        <label>Member Since</label>
+        <span id="mdtl-created" style="font-size:12.5px">—</span>
+      </div>
+    </div>
+
+    <!-- Connected UPIs List -->
+    <div style="margin-bottom:16px">
+      <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;display:block;margin-bottom:8px">Connected Receiving UPI Accounts</span>
+      <div id="mdtl-upis-container" style="display:flex;flex-direction:column;gap:6px">
+        <div class="loading">Loading UPIs…</div>
+      </div>
+    </div>
+
+    <!-- Connected Payment Links -->
+    <div style="margin-bottom:16px">
+      <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;display:block;margin-bottom:8px">Payment Links</span>
+      <div id="mdtl-links-container" style="display:flex;flex-direction:column;gap:6px">
+        <div class="loading">Loading links…</div>
+      </div>
+    </div>
+
+    <!-- Recent Transactions -->
+    <div style="margin-bottom:18px">
+      <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;display:block;margin-bottom:8px">Recent Transactions</span>
+      <div id="mdtl-txs-container" style="display:flex;flex-direction:column;gap:6px">
+        <div class="loading">Loading transactions…</div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div style="display:flex;gap:10px;border-top:1px solid var(--line);padding-top:16px">
+      <button class="btn btn-warn" id="mdtl-suspend-btn" style="flex:1">Toggle Suspension</button>
+      <button class="btn btn-outline close" style="padding:10px 18px">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODAL: AUDITED SUSPEND / UNSUSPEND MODAL
+════════════════════════════════════════════════════════════════ -->
+<div class="backdrop" id="audited-suspend-modal">
+  <div class="modal" style="max-width:480px;width:100%">
+    <button class="close">×</button>
+    <p class="eyebrow" id="susp-modal-eyebrow">AUDITED MERCHANT GOVERNANCE</p>
+    <h2 id="susp-modal-title">Suspend Merchant Account</h2>
+    <p id="susp-modal-desc">This action will immediately restrict or restore merchant access and is permanently logged in the audit trail.</p>
+
+    <form id="audited-suspend-form">
+      <input type="hidden" id="susp-merchant-id">
+      <input type="hidden" id="susp-target-state">
+
+      <div class="field">
+        <label for="susp-reason-code">Reason Code (Mandatory)</label>
+        <select id="susp-reason-code" class="filter-select" style="width:100%" required>
+          <option value="COMPLIANCE_HOLD">COMPLIANCE_HOLD — KYC / Document review required</option>
+          <option value="SUSPECTED_FRAUD">SUSPECTED_FRAUD — Suspicious transaction activity</option>
+          <option value="MERCHANT_STATUS_UPDATE">MERCHANT_STATUS_UPDATE — Routine merchant operational update</option>
+          <option value="MERCHANT_KYC_FAILED">MERCHANT_KYC_FAILED — Identity verification failed</option>
+          <option value="ADMIN_SECURITY_OVERRIDE">ADMIN_SECURITY_OVERRIDE — Administrator security directive</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="susp-justification">Written Justification (Minimum 10 Characters)</label>
+        <textarea id="susp-justification" rows="3" class="filter-input" required placeholder="Detailed reason for this audited action…" style="width:100%"></textarea>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="submit" class="btn btn-primary" id="susp-submit-btn" style="flex:1">Confirm &amp; Log Audit Action →</button>
+        <button type="button" class="btn btn-outline close">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODAL: INVESTIGATION TIMELINE DRAWER
+════════════════════════════════════════════════════════════════ -->
+<div class="backdrop" id="investigation-drawer">
+  <div class="modal modal-drawer" style="max-width:640px;width:100%">
+    <button class="close">×</button>
+    <div class="drawer-header">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="drawer-icon">🔎</span>
+        <div>
+          <p class="eyebrow" style="margin:0;font-size:10.5px">INVESTIGATION TIMELINE</p>
+          <h2 id="inv-dtl-ref" style="font-family:monospace;margin:0;font-size:18px;color:#FFFFFF">SP...</h2>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="inv-dtl-status-pill"></span>
+        <span id="inv-dtl-recon-pill"></span>
+      </div>
+    </div>
+
+    <!-- Ambiguity Notice Box -->
+    <div id="inv-dtl-ambiguity-box" style="display:none;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.35);color:#FBBF24;padding:12px 14px;border-radius:10px;font-size:12.5px;margin:14px 0;line-height:1.5">
+      <strong style="display:block;margin-bottom:3px">⚠️ Ambiguity Diagnostic Flag</strong>
+      <span id="inv-dtl-ambiguity-text"></span>
+    </div>
+
+    <!-- Diagnostics Breakdown -->
+    <div class="drawer-stats-grid" style="margin:14px 0">
+      <div class="drawer-stat-item">
+        <label>Amount (INR)</label>
+        <strong id="inv-dtl-amount" style="color:#10B981;font-size:18px">₹0</strong>
+        <small id="inv-dtl-paise" style="color:var(--muted);font-family:monospace">0 paise</small>
+      </div>
+      <div class="drawer-stat-item">
+        <label>UTR Number</label>
+        <code id="inv-dtl-utr" style="font-family:monospace;font-size:13px;color:#F8FAFC">—</code>
+        <small id="inv-dtl-utr-sub" style="color:var(--muted)">Evidence</small>
+      </div>
+      <div class="drawer-stat-item">
+        <label>Provider Ref</label>
+        <code id="inv-dtl-provider-ref" style="font-family:monospace;font-size:12px;color:#818CF8">—</code>
+      </div>
+      <div class="drawer-stat-item">
+        <label>Merchant</label>
+        <strong id="inv-dtl-merchant" style="font-size:12.5px">—</strong>
+      </div>
+    </div>
+
+    <!-- Chronological Event Timeline -->
+    <div style="margin:20px 0">
+      <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;display:block;margin-bottom:12px">Chronological Lifecycle Pipeline</span>
+      <div class="timeline-container" id="inv-timeline-container">
+        <div class="loading">Assembling lifecycle events…</div>
+      </div>
+    </div>
+
+    <!-- Action Bar -->
+    <div style="display:flex;gap:10px;border-top:1px solid var(--line);padding-top:16px" id="inv-action-bar">
+      <button class="btn btn-primary" id="inv-reconcile-btn" style="flex:1">Audited Reconcile Action →</button>
+      <button class="btn btn-outline close" style="padding:10px 18px">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODAL: SAFE MANUAL RECONCILIATION MODAL
+════════════════════════════════════════════════════════════════ -->
+<div class="backdrop" id="reconcile-modal">
+  <div class="modal" style="max-width:520px;width:100%">
+    <button class="close">×</button>
+    <p class="eyebrow">AUDITED SETTLEMENT ENGINE</p>
+    <h2>Manual Reconciliation</h2>
+    <p>Reconcile discrepancies with authoritative proof. Protected by optimistic concurrency and terminal locks.</p>
+
+    <div class="reconcile-summary-card">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="color:var(--muted);font-size:12px">Target Transaction:</span>
+        <code id="rec-target-ref" style="font-family:monospace;color:#FFFFFF;font-weight:700">SP...</code>
+      </div>
+      <div style="display:flex;justify-content:space-between">
+        <span style="color:var(--muted);font-size:12px">Amount:</span>
+        <b id="rec-target-amount" style="color:#10B981">₹0</b>
+      </div>
+    </div>
+
+    <form id="reconcile-form">
+      <input type="hidden" id="rec-tx-id">
+      <input type="hidden" id="rec-expected-status">
+
+      <div class="field">
+        <label for="rec-action-select">Reconciliation Action</label>
+        <select id="rec-action-select" class="filter-select" style="width:100%" required onchange="handleRecActionChange()">
+          <option value="force_settle_with_proof">force_settle_with_proof — Settle payment with authoritative bank/gateway proof</option>
+          <option value="mark_failed_with_proof">mark_failed_with_proof — Mark payment as failed with documented fraud/timeout proof</option>
+          <option value="flag_for_review">flag_for_review — Flag transaction for manual compliance review</option>
+        </select>
+      </div>
+
+      <div class="field" id="rec-proof-utr-group">
+        <label for="rec-utr">Bank UTR Proof (Required for Settlement)</label>
+        <input type="text" id="rec-utr" placeholder="12-digit verified bank UTR" class="filter-input">
+      </div>
+
+      <div class="field" id="rec-proof-ref-group">
+        <label for="rec-prov-ref">Gateway Provider Reference (Optional if UTR provided)</label>
+        <input type="text" id="rec-prov-ref" placeholder="Gateway transaction ID / provider reference" class="filter-input">
+      </div>
+
+      <div class="field">
+        <label for="rec-reason-code">Official Reason Code (Mandatory)</label>
+        <select id="rec-reason-code" class="filter-select" style="width:100%" required>
+          <option value="OFFICIAL_BANK_STATEMENT_PROOF">OFFICIAL_BANK_STATEMENT_PROOF — Verified against signed bank statement</option>
+          <option value="GATEWAY_PORTAL_CONFIRMED">GATEWAY_PORTAL_CONFIRMED — Confirmed via gateway merchant portal</option>
+          <option value="CHARGEBACK_RESOLVED">CHARGEBACK_RESOLVED — Customer chargeback dispute resolved</option>
+          <option value="DUPLICATE_RESOLVED_MANUAL">DUPLICATE_RESOLVED_MANUAL — Discrepancy resolved after manual audit</option>
+          <option value="SUSPECTED_FRAUD">SUSPECTED_FRAUD — Fraudulent or fabricated UTR evidence</option>
+          <option value="CUSTOMER_DISPUTE_SETTLED">CUSTOMER_DISPUTE_SETTLED — Customer dispute settled with merchant</option>
+          <option value="COMPLIANCE_HOLD">COMPLIANCE_HOLD — Compliance review flag</option>
+          <option value="ADMIN_SECURITY_OVERRIDE">ADMIN_SECURITY_OVERRIDE — Administrator security directive</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="rec-justification">Written Justification (Minimum 10 Characters)</label>
+        <textarea id="rec-justification" rows="3" class="filter-input" required placeholder="Detailed explanation of evidence verified…" style="width:100%"></textarea>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="submit" class="btn btn-primary" id="rec-submit-btn" style="flex:1">Execute &amp; Log Reconciliation →</button>
+        <button type="button" class="btn btn-outline close">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODAL: STAFF USER CREATION
+════════════════════════════════════════════════════════════════ -->
+<div class="backdrop" id="staff-modal">
+  <div class="modal" style="max-width:440px;width:100%">
+    <button class="close">×</button>
+    <p class="eyebrow">PERSONNEL ONBOARDING</p>
+    <h2>Add Staff Member</h2>
+    <p>Create an administrative account with server-enforced role permissions.</p>
+
+    <form id="staff-form">
+      <div class="field">
+        <label for="staff-name">Full Name</label>
+        <input type="text" id="staff-name" required placeholder="e.g. Ramesh Kumar" class="filter-input">
+      </div>
+
+      <div class="field">
+        <label for="staff-email">Staff Email Address</label>
+        <input type="email" id="staff-email" required placeholder="ramesh@sakkupay.local" class="filter-input">
+      </div>
+
+      <div class="field">
+        <label for="staff-pass">Password (Min 8 Characters)</label>
+        <input type="password" id="staff-pass" required minlength="8" placeholder="••••••••••••" class="filter-input">
+      </div>
+
+      <div class="field">
+        <label for="staff-role">Assigned Role</label>
+        <select id="staff-role" class="filter-select" style="width:100%" required>
+          <option value="OperationsSupport">OperationsSupport — Merchant &amp; Payment Support</option>
+          <option value="ComplianceAuditor">ComplianceAuditor — Read-Only Forensic Auditor</option>
+          <option value="SuperAdmin">SuperAdmin — Full Administrative Access</option>
+        </select>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="submit" class="btn btn-primary" id="staff-submit-btn" style="flex:1">Create Staff User →</button>
+        <button type="button" class="btn btn-outline close">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODAL: AUDIT LOG INSPECT STATE DIFF
+════════════════════════════════════════════════════════════════ -->
+<div class="backdrop" id="audit-inspect-modal">
+  <div class="modal modal-drawer" style="max-width:680px;width:100%">
+    <button class="close">×</button>
+    <p class="eyebrow">AUDIT RECORD INSPECTION</p>
+    <h2 id="aud-insp-action" style="margin:0 0 4px;font-size:18px;color:#FFFFFF">Action</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px">
+      Executed by <b id="aud-insp-actor" style="color:#FFFFFF">—</b> · Reason: <code id="aud-insp-reason" style="font-family:monospace;color:#818CF8">—</code>
+    </p>
+
+    <div style="margin-bottom:14px;background:var(--card-inner);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:13px">
+      <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:4px">Justification</span>
+      <span id="aud-insp-justification" style="color:#FFFFFF;line-height:1.5"></span>
+    </div>
+
+    <div class="diff-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div>
+        <span class="diff-label">State Before Action</span>
+        <pre class="diff-pre" id="aud-insp-before">{}</pre>
+      </div>
+      <div>
+        <span class="diff-label">State After Action</span>
+        <pre class="diff-pre" id="aud-insp-after">{}</pre>
+      </div>
+    </div>
+    <div style="margin-top:16px;text-align:right">
+      <button class="btn btn-outline close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Notifications -->
+<div id="toast"></div>
+
+<script src="admin.js"></script>
+</body>
+</html>

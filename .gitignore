@@ -1,0 +1,51 @@
+# ==============================================================================
+# SakkuPay — Git Ignore Rules for Safe Source Publishing
+# Strictly excludes all live databases, persistence records, secrets, and backups.
+# ==============================================================================
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+staging/.env*
+!staging/.env.staging.example
+
+# SQLite Databases & WAL/SHM lock files
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+sakkupay.db
+sakkupay_qa.db
+temp_test_*.db
+staging/*.db
+staging/*.db-wal
+staging/*.db-shm
+
+# Persistence records containing financial data & customer transactions
+data.json
+staging/data.json
+!data.json.example
+
+# Backups & Snapshots
+.backup*
+*.bak
+backups/
+staging/backups/
+
+# Node runtime & package manager logs
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs/
+*.log
+
+# Temporary, scratch, and OS files
+scratch/
+.temp/
+tmp/
+.DS_Store
+Thumbs.db

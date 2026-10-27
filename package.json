@@ -1,0 +1,29 @@
+{
+  "name": "sakkupay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multi-UPI payment link gateway",
+  "scripts": {
+    "build": "echo 'No build step required'",
+    "start": "node server.js",
+    "migrate": "node src/db/migrate.js",
+    "test:m1": "node test-milestone1.js",
+    "test:m2": "node test-milestone2.js",
+    "test:m3": "node test-milestone3.js",
+    "test:m4": "node test-milestone4.js",
+    "test:m5": "node test-milestone5.js",
+    "test:m6": "node test-milestone6.js",
+    "test:all": "node run_all_milestones.js",
+    "test": "node run_all_milestones.js",
+    "staging:seed": "node staging/seed_staging.js",
+    "staging:backup-test": "node staging/test_staging_backup.js",
+    "staging:verify": "node staging/verify_staging_instance.js",
+    "staging:test-e2e": "node staging/test_staging_e2e.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  }
+}

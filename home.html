@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SakkuPay - Multi-UPI Payment Gateway & Link Generator</title>
+  <meta name="description" content="Collect direct UPI payments with zero gateway deductions. Generate dynamic QR links with 1-tap UPI app intents and instant automated verification.">
+  <link rel="icon" type="image/svg+xml" href="/assets/logo-icon.svg">
+  <link rel="stylesheet" href="/home.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header class="navbar">
+    <div class="container nav-container">
+      <a href="/" class="logo-wrap" title="SakkuPay - Instant UPI Gateway">
+        <img src="/assets/logo.svg" alt="SakkuPay Logo">
+      </a>
+
+      <nav>
+        <ul class="nav-links">
+          <li><a href="#features">Features</a></li>
+          <li><a href="#verification">Dual Verification</a></li>
+          <li><a href="#how-it-works">How It Works</a></li>
+          <li><a href="#comparison">0% Fee Advantage</a></li>
+          <li><a href="#privacy">Privacy Policy</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </nav>
+
+      <div class="nav-cta">
+        <a href="/login" class="btn btn-outline btn-sm">Sign In</a>
+        <a href="/login" class="btn btn-primary btn-sm">Get Started Free →</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container hero-grid">
+      <div class="hero-content">
+        <div class="badge-pill">
+          <span>⚡</span> Next-Gen Indian UPI Infrastructure
+        </div>
+        <h1 class="hero-title">
+          Collect Direct UPI Payments. <span class="grad-text">0% Gateway Fees.</span> Instant Verification.
+        </h1>
+        <p class="hero-subtitle">
+          Connect multiple UPI handles, generate dynamic QR links with 1-tap mobile app intents (Google Pay, PhonePe, Paytm, BHIM), and auto-verify every rupee directly into your bank account.
+        </p>
+
+        <div class="hero-actions">
+          <a href="/login" class="btn btn-primary btn-lg">Start Collecting Free →</a>
+          <a href="#how-it-works" class="btn btn-outline btn-lg">See How It Works</a>
+        </div>
+
+        <div class="hero-highlights">
+          <span><span class="check-icon">✓</span> Zero Commission (0% Fee)</span>
+          <span><span class="check-icon">✓</span> 100% Direct Settlement</span>
+          <span><span class="check-icon">✓</span> Google 1-Click Login</span>
+          <span><span class="check-icon">✓</span> No Bank PINs Asked</span>
+        </div>
+      </div>
+
+      <!-- Live Interactive Checkout Mockup -->
+      <div class="hero-mockup">
+        <div class="hero-mockup-card">
+          <div class="mockup-header">
+            <div class="mockup-dots">
+              <span></span><span></span><span></span>
+            </div>
+            <small style="font-size:11px;font-weight:600;color:#64748b">sakkupay.in/pay/summer-order</small>
+            <span style="font-size:11px;color:#10b981;font-weight:700">🔒 256-bit SSL</span>
+          </div>
+
+          <div class="mockup-body">
+            <div class="demo-checkout-box">
+              <div class="demo-merchant-title">Handcrafted Artisan Store</div>
+              <div class="demo-amount">₹499.00</div>
+
+              <!-- Interactive Dynamic QR Visual -->
+              <div class="demo-qr-box">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M2 2h8v8H2V2zm2 2v4h4V4H4zm10-2h8v8h-8V2zm2 2v4h4V4h-4zM2 14h8v8H2v-8zm2 2v4h4v-4H4zm14 0h4v4h-4v-4zm-4 4h4v4h-4v-4zm4-4v-4h-4v4h4zm-4-4h4V6h-4v4z"/>
+                </svg>
+                <span>SCAN IN ANY APP</span>
+              </div>
+
+              <!-- 1-Tap App Redirect Buttons -->
+              <div class="demo-apps-row">
+                <span class="demo-app-pill gpay">GPay</span>
+                <span class="demo-app-pill phonepe">PhonePe</span>
+                <span class="demo-app-pill paytm">Paytm</span>
+                <span class="demo-app-pill">BHIM</span>
+              </div>
+            </div>
+
+            <!-- Live Real-Time Pulse Notification -->
+            <div style="text-align:center">
+              <div class="live-pulse-badge">
+                <span class="pulse-dot"></span>
+                <span>Auto-Verified: ₹499 received via PhonePe Direct</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Supported Payment Apps Bar -->
+  <section class="supported-bar">
+    <div class="container">
+      <p class="supported-label">Supports 100% of Indian UPI Apps &amp; Major Banks</p>
+      <div class="supported-logos">
+        <span class="app-brand">Google Pay</span>
+        <span class="app-brand" style="color:#5f259f">PhonePe</span>
+        <span class="app-brand" style="color:#002e6e">Paytm</span>
+        <span class="app-brand" style="color:#00796b">BHIM UPI</span>
+        <span class="app-brand">CRED</span>
+        <span class="app-brand">Amazon Pay</span>
+        <span class="app-brand">SBI · HDFC · ICICI · Axis</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Core Features Section -->
+  <section class="section" id="features">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-eyebrow">BUILT FOR SPEED &amp; TRUST</span>
+        <h2 class="section-title">Everything you need to collect payments seamlessly</h2>
+        <p class="section-desc">
+          Stop paying 2% to 3% gateway deductions and waiting days for your money. SakkuPay turns your personal or business UPI accounts into an enterprise-grade checkout engine.
+        </p>
+      </div>
+
+      <div class="features-grid">
+        <article class="feature-card">
+          <div class="feature-icon" style="background:#e0e7ff;color:#4f46e5">⚡</div>
+          <h3 class="feature-title">Dynamic QR &amp; 1-Tap Mobile Intents</h3>
+          <p class="feature-text">
+            When buyers open your checkout link on mobile, they tap once to open Google Pay, PhonePe, or Paytm with pre-filled amount and recipient details. On desktop, high-res dynamic QR codes scan in seconds.
+          </p>
+        </article>
+
+        <article class="feature-card">
+          <div class="feature-icon" style="background:#ecfdf5;color:#10b981">🏦</div>
+          <h3 class="feature-title">100% Direct Bank Settlement</h3>
+          <p class="feature-text">
+            Payments are settled peer-to-peer via official UPI infrastructure directly into your bank account. No middlemen holding your money in escrow, and zero T+2 settlement delays.
+          </p>
+        </article>
+
+        <article class="feature-card">
+          <div class="feature-icon" style="background:#fef3c7;color:#d97706">🔄</div>
+          <h3 class="feature-title">Dual Automated Verification</h3>
+          <p class="feature-text">
+            Link PhonePe Business or Paytm Business directly with AES-256 encrypted credential vaulting, or use our background Android Companion App to auto-verify bank SMS and payment alerts.
+          </p>
+        </article>
+
+        <article class="feature-card">
+          <div class="feature-icon" style="background:#f1f5f9;color:#334155">🛠</div>
+          <h3 class="feature-title">Developer &amp; Bot REST API</h3>
+          <p class="feature-text">
+            Generate payment links programmatically from Telegram bots, e-commerce stores, Discord servers, or custom billing software with secure <code>sk_live_...</code> API keys and webhooks.
+          </p>
+        </article>
+
+        <article class="feature-card">
+          <div class="feature-icon" style="background:#ede9fe;color:#7c3aed">🔗</div>
+          <h3 class="feature-title">Multi-UPI Handle Management</h3>
+          <p class="feature-text">
+            Add multiple receiving UPI IDs (e.g., store@okaxis, shop@ybl, business@paytm) under one unified merchant dashboard, route specific links to specific UPI handles, and switch active destinations anytime.
+          </p>
+        </article>
+
+        <article class="feature-card">
+          <div class="feature-icon" style="background:#fee2e2;color:#dc2626">🔒</div>
+          <h3 class="feature-title">Bank-Grade Privacy &amp; Security</h3>
+          <p class="feature-text">
+            No bank passwords, ATM cards, CVVs, or UPI MPINs are ever requested. Merchants authenticate seamlessly using Google OAuth 2.0 with zero OTP delays.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Dual Verification Showcase Section -->
+  <section class="section section-alt" id="verification">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-eyebrow">ZERO MANUAL CHECKING</span>
+        <h2 class="section-title">Two verification methods. Total peace of mind.</h2>
+        <p class="section-desc">
+          Choose the integration that fits your business setup, or use both simultaneously for a bulletproof confirmation pipeline.
+        </p>
+      </div>
+
+      <div class="features-grid" style="grid-template-columns:1fr 1fr">
+        <div class="feature-card" style="border-top:4px solid #4f46e5">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <span style="font-size:28px">⚡</span>
+            <span style="font-size:11px;font-weight:700;background:#e0e7ff;color:#4338ca;padding:4px 10px;border-radius:6px">METHOD 1</span>
+          </div>
+          <h3 class="feature-title">Direct Business Account Linking</h3>
+          <p class="feature-text" style="margin-bottom:16px">
+            Directly connect your registered <b>PhonePe Business</b> or <b>Paytm Business</b> merchant account inside your SakkuPay dashboard.
+          </p>
+          <ul style="font-size:13.5px;color:#64748b;line-height:1.7;padding-left:18px;margin-bottom:20px">
+            <li>Direct server-to-server webhook callbacks</li>
+            <li>Stored in a dedicated AES-256-GCM encrypted vault</li>
+            <li>Instant settlement confirmation directly from provider APIs</li>
+            <li>Visual <code>⚡ PhonePe Direct</code> &amp; <code>⚡ Paytm Direct</code> tags</li>
+          </ul>
+          <div style="margin-top:auto">
+            <a href="/login" class="btn btn-outline btn-sm" style="width:100%">Link Business Account →</a>
+          </div>
+        </div>
+
+        <div class="feature-card" style="border-top:4px solid #10b981">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <span style="font-size:28px">🤖</span>
+            <span style="font-size:11px;font-weight:700;background:#ecfdf5;color:#065f46;padding:4px 10px;border-radius:6px">METHOD 2 (FALLBACK)</span>
+          </div>
+          <h3 class="feature-title">Android Companion App</h3>
+          <p class="feature-text" style="margin-bottom:16px">
+            For personal UPI handles or bank accounts without gateway credentials, run our lightweight companion service on your Android phone.
+          </p>
+          <ul style="font-size:13.5px;color:#64748b;line-height:1.7;padding-left:18px;margin-bottom:20px">
+            <li>Listens for payment notifications from GPay, PhonePe, Paytm &amp; Bank SMS</li>
+            <li>Strict local regex engine ignores debit/outgoing messages</li>
+            <li>Parses amount and 12-digit UTR on-device with zero privacy leakage</li>
+            <li>Dispatches verified payload to SakkuPay server in &lt;1 second</li>
+          </ul>
+          <div style="margin-top:auto">
+            <a href="/login" class="btn btn-outline btn-sm" style="width:100%">Setup Android Companion →</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works Section -->
+  <section class="section" id="how-it-works">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-eyebrow">SIMPLE 3-STEP WORKFLOW</span>
+        <h2 class="section-title">Start collecting in less than 2 minutes</h2>
+        <p class="section-desc">No lengthy documentation, merchant approval queues, or paperwork required.</p>
+      </div>
+
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-num">1</div>
+          <h3 style="font-size:18px;margin-bottom:10px">Sign In with Google &amp; Add UPI</h3>
+          <p style="font-size:14px;color:#64748b">
+            Log in instantly with your Google account. Add one or multiple receiving UPI IDs (like <code>yourstore@okaxis</code>) and verify your linked phone number.
+          </p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">2</div>
+          <h3 style="font-size:18px;margin-bottom:10px">Generate Your Payment Link</h3>
+          <p style="font-size:14px;color:#64748b">
+            Create fixed-price links for products or open-amount links for donations and flexible invoices. Customize your link slug (e.g. <code>sakkupay.in/pay/art-print</code>).
+          </p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">3</div>
+          <h3 style="font-size:18px;margin-bottom:10px">Get Paid with Auto-Verification</h3>
+          <p style="font-size:14px;color:#64748b">
+            Share your link on WhatsApp, Instagram, or external bots. Customer taps or scans to pay, and your dashboard updates live via real-time SSE!
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Fee & Cost Savings Comparison Section -->
+  <section class="section section-alt" id="comparison">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-eyebrow">SAVE YOUR REVENUE</span>
+        <h2 class="section-title">Traditional Payment Gateways vs. SakkuPay</h2>
+        <p class="section-desc">See how much money and time you save by collecting directly via SakkuPay.</p>
+      </div>
+
+      <div class="comparison-box">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th>Feature / Parameter</th>
+              <th>Traditional Gateways (Razorpay, Cashfree, etc.)</th>
+              <th class="highlight-col">SakkuPay Gateway</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>Transaction Commission</b></td>
+              <td>2.0% - 2.5% + 18% GST on every sale</td>
+              <td class="highlight-col"><b>0.0% (Zero deduction)</b></td>
+            </tr>
+            <tr>
+              <td><b>Payout &amp; Settlement Time</b></td>
+              <td>T+2 to T+3 working days delay</td>
+              <td class="highlight-col"><b>Instant (Direct into your Bank Account)</b></td>
+            </tr>
+            <tr>
+              <td><b>Merchant KYC &amp; Onboarding</b></td>
+              <td>Lengthy business KYC, GST, and bank statements</td>
+              <td class="highlight-col"><b>Instant Google 1-Click Sign In</b></td>
+            </tr>
+            <tr>
+              <td><b>Account Freeze / Reserve Holds</b></td>
+              <td>High risk of rolling reserve and fund freezing</td>
+              <td class="highlight-col"><b>Zero risk — Funds never pass through SakkuPay</b></td>
+            </tr>
+            <tr>
+              <td><b>UPI App Support</b></td>
+              <td>Standard webview redirects</td>
+              <td class="highlight-col"><b>1-Tap Native UPI Intents (GPay, PhonePe, Paytm, BHIM)</b></td>
+            </tr>
+            <tr>
+              <td><b>Annual Fee / AMC</b></td>
+              <td>₹0 to ₹5,000 setup charges</td>
+              <td class="highlight-col"><b>₹0 Free Forever</b></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Comprehensive Privacy Policy & Security Section -->
+  <section class="section privacy-section" id="privacy">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-eyebrow">YOUR PRIVACY IS OUR CORE MANDATE</span>
+        <h2 class="section-title">Privacy Policy &amp; Security Commitment</h2>
+        <p class="section-desc">
+          We believe in complete transparency. SakkuPay is designed from the ground up to never touch customer funds, sensitive bank passwords, or debit/credit card credentials.
+        </p>
+      </div>
+
+      <div class="privacy-grid">
+        <div class="privacy-card">
+          <h3>🔒 1. Zero Sensitive Financial Data Storage</h3>
+          <p>
+            SakkuPay does <b>NOT</b> collect, process, or store credit cards, debit cards, CVV numbers, Net Banking passwords, or UPI MPINs. All payments are completed securely inside the customer's own official UPI application on their smartphone.
+          </p>
+          <ul style="margin-top:10px">
+            <li>Customer money moves directly from their bank to your bank via NPCI UPI protocol.</li>
+            <li>No funds are ever held in escrow or intermediary accounts.</li>
+          </ul>
+        </div>
+
+        <div class="privacy-card">
+          <h3>🛡 2. Information We Collect &amp; How It Is Used</h3>
+          <p>
+            We collect only the bare essential information needed to operate your merchant account:
+          </p>
+          <ul>
+            <li><b>Merchant Identity:</b> Email and name provided securely via Google OAuth 2.0.</li>
+            <li><b>Receiving UPI Handles:</b> The public UPI IDs you choose to receive payments to.</li>
+            <li><b>Contact Details:</b> Optional WhatsApp contact phone number for customer receipts.</li>
+            <li><b>Transaction Metadata:</b> Timestamps, amounts, reference IDs, and provider UTRs.</li>
+          </ul>
+        </div>
+
+        <div class="privacy-card">
+          <h3>📱 3. Android Companion App Privacy Safeguards</h3>
+          <p>
+            Our lightweight Android Companion app strictly abides by mobile privacy standards:
+          </p>
+          <ul>
+            <li>All notification parsing occurs <b>locally on your device</b> via regular expressions.</li>
+            <li>Non-payment SMS, personal chats, and contact lists are strictly ignored and never transmitted.</li>
+            <li>Only parsed transaction amounts, UTR reference numbers, and timestamps are forwarded over encrypted HTTPS.</li>
+          </ul>
+        </div>
+
+        <div class="privacy-card">
+          <h3>🔐 4. AES-256-GCM Credential Vaulting</h3>
+          <p>
+            When linking PhonePe Business or Paytm Business accounts:
+          </p>
+          <ul>
+            <li>API secrets and salt keys are encrypted using <b>AES-256-GCM</b> before persistence.</li>
+            <li>Plaintext credentials are never exposed in browser inspect elements or client APIs.</li>
+            <li>You can edit or permanently delete your linked credentials with 1-click anytime.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div style="text-align:center;margin-top:36px;font-size:13px;color:#64748b">
+        Questions regarding our data handling practices? Contact our Data Protection Officer at <a href="mailto:privacy@sakkupay.in" style="font-weight:600">privacy@sakkupay.in</a>.
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ Section -->
+  <section class="section section-alt" id="faq">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-eyebrow">COMMON QUESTIONS</span>
+        <h2 class="section-title">Frequently Asked Questions</h2>
+      </div>
+
+      <div class="faq-list">
+        <div class="faq-item">
+          <h3 class="faq-question">Do I need a registered business or GST to use SakkuPay?</h3>
+          <p class="faq-answer">
+            No! SakkuPay works with both individual personal UPI accounts and registered merchant business accounts. You can start collecting immediately with just a Google account and a valid UPI ID.
+          </p>
+        </div>
+
+        <div class="faq-item">
+          <h3 class="faq-question">How does SakkuPay charge 0% fees?</h3>
+          <p class="faq-answer">
+            Traditional gateways act as aggregators who pool money into escrow and charge 2% fees for settlement. SakkuPay connects customers directly to your UPI handle via standard UPI intent links and dynamic QR codes, allowing 100% peer-to-peer settlement without intermediary overhead.
+          </p>
+        </div>
+
+        <div class="faq-item">
+          <h3 class="faq-question">What is the difference between Direct Linking and the Companion App?</h3>
+          <p class="faq-answer">
+            Direct Linking connects your PhonePe Business or Paytm Business merchant credentials for server-to-server webhook verification. The Companion App runs in the background on your Android phone and automatically captures incoming bank SMS/payment notifications for any bank account. Both methods update your dashboard live!
+          </p>
+        </div>
+
+        <div class="faq-item">
+          <h3 class="faq-question">Can I integrate SakkuPay with my Telegram bot or website?</h3>
+          <p class="faq-answer">
+            Yes! SakkuPay provides a clean REST API. Generate an API key (<code>sk_live_...</code>) in your dashboard to programmatically create payment links, set custom amounts, and receive webhook notifications.
+          </p>
+        </div>
+      </div>
+
+      <!-- CTA Banner -->
+      <div class="cta-banner">
+        <h2>Ready to upgrade your UPI payment flow?</h2>
+        <p>Join smart Indian merchants, freelancers, and businesses collecting direct UPI payments with zero gateway deductions.</p>
+        <a href="/login" class="btn btn-primary btn-lg" style="background:#ffffff;color:#0f172a;box-shadow:0 10px 25px rgba(255,255,255,0.2)">Get Started in 60 Seconds →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <img src="/assets/logo.svg" alt="SakkuPay" style="height:38px">
+          <p>
+            India's premier multi-UPI payment gateway, custom payment link generator, and real-time verification suite.
+          </p>
+        </div>
+
+        <div class="footer-col">
+          <h4>Product</h4>
+          <ul>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#verification">Verification Engine</a></li>
+            <li><a href="#how-it-works">How It Works</a></li>
+            <li><a href="#comparison">0% Fee Advantage</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4>Portals</h4>
+          <ul>
+            <li><a href="/login">Merchant Sign In</a></li>
+            <li><a href="/dashboard">User Dashboard</a></li>
+            <li><a href="/admin">Admin Dashboard</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4>Legal &amp; Trust</h4>
+          <ul>
+            <li><a href="#privacy">Privacy Policy</a></li>
+            <li><a href="#privacy">Security Standards</a></li>
+            <li><a href="mailto:support@sakkupay.in">Support Center</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <span>© 2026 SakkuPay Technologies. All rights reserved. Built with pride in India 🇮🇳.</span>
+        <span>Secured by 256-Bit SSL Encryption</span>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
