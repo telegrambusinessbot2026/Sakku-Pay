@@ -39,7 +39,8 @@ const mime = {
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
-  '.png': 'image/png'
+  '.png': 'image/png',
+  '.ico': 'image/x-icon'
 };
 
 const sqliteDb = getDatabase();
@@ -363,16 +364,23 @@ function publish(merchantId, event, data) {
 }
 function publicLink(link) {
   let m = repository.merchants.findById(link.merchantId) || (db.merchants && db.merchants.find(x => x.id === link.merchantId));
+  let upiVpa = link.upiId;
+  if (upiVpa && upiVpa.startsWith('upi_')) {
+    const u = repository.upis.findById(upiVpa) || (db.upis && db.upis.find(x => x.id === upiVpa));
+    if (u?.upiId) upiVpa = u.upiId;
+  }
   return {
+    id: link.id,
     slug: link.slug,
     name: link.name,
     description: link.description,
     amount: link.amount,
     amountType: link.amountType,
-    upiId: link.upiId,
+    template: link.template || 'classic',
+    upiId: upiVpa,
     businessName: m?.businessName || 'Merchant',
     whatsappNumber: m?.whatsappNumber || '',
-    active: link.active
+    active: Boolean(link.active)
   };
 }
 
@@ -1440,8 +1448,17 @@ async function route(req, res) {
     return json(res, 200, { status: tx.status, reference: tx.reference, utr: tx.utr || '', paidAt: tx.paidAt || null, verifiedBy: tx.verifiedBy || null });
   }
   if (method === 'GET' && p.startsWith('/api/checkout/')) {
-    let link = repository.links.findBySlug(decodeURIComponent(p.slice(14))) || (db.links && db.links.find(l => l.slug === decodeURIComponent(p.slice(14)) && l.active));
-    return (link && link.active) ? json(res, 200, publicLink(link)) : json(res, 404, { error: 'Payment link not found or inactive' });
+    let slug = decodeURIComponent(p.slice(14)).trim();
+    if (!slug) return json(res, 400, { error: 'Payment link identifier is required', code: 'INVALID_SLUG' });
+    let link = repository.links.findBySlug(slug) || repository.links.findById(slug) ||
+      (db.links && db.links.find(l => (l.slug === slug || l.id === slug)));
+    if (!link) {
+      return json(res, 404, { error: 'Payment link not found', code: 'LINK_NOT_FOUND' });
+    }
+    if (!link.active) {
+      return json(res, 404, { error: 'Payment link is inactive or has expired', code: 'LINK_INACTIVE' });
+    }
+    return json(res, 200, publicLink(link));
   }
 
   /* ── Checkout attempt (with rate limiting) ── */
@@ -1592,6 +1609,79 @@ async function route(req, res) {
     key.lastUsedAt = new Date().toISOString();
     persist();
     return json(res, 201, { ...link, url: `${url.origin}/pay/${link.slug}` });
+  }
+
+  /* ── Companion App Status & Protected APK Download ── */
+  if (p === '/api/companion/status') {
+    const candidatePaths = [
+      path.join(ROOT, 'companion-android/app/build/outputs/apk/release/app-release.apk'),
+      path.join(ROOT, 'downloads/sakkupay-companion.apk')
+    ];
+    const apkPath = candidatePaths.find(cand => fs.existsSync(cand));
+    if (apkPath) {
+      const stat = fs.statSync(apkPath);
+      return json(res, 200, {
+        available: true,
+        version: '1.0',
+        versionCode: 1,
+        packageName: 'in.sakkupay.companion',
+        filename: 'sakkupay-companion-v1.0.apk',
+        sizeBytes: stat.size,
+        sizeFormatted: (stat.size / (1024 * 1024)).toFixed(2) + ' MB'
+      });
+    } else {
+      return json(res, 200, {
+        available: false,
+        version: '1.0',
+        versionCode: 1,
+        packageName: 'in.sakkupay.companion',
+        message: 'Companion APK is not yet compiled on this server.'
+      });
+    }
+  }
+
+  if (p === '/api/companion/download' || p === '/downloads/sakkupay-companion.apk') {
+    if (method !== 'GET' && method !== 'HEAD') {
+      res.writeHead(405, { 'Content-Type': 'application/json', 'Allow': 'GET, HEAD' });
+      return res.end(JSON.stringify({ error: 'Method Not Allowed', message: 'Only GET and HEAD requests are permitted.' }));
+    }
+
+    // Security & Authorization: Only authenticated merchants may download the companion app
+    const merchant = auth(req);
+    if (!merchant) {
+      return json(res, 401, {
+        error: 'Unauthorized',
+        message: 'Authentication required. Please sign in to your SakkuPay merchant account to download the Companion APK.'
+      });
+    }
+
+    const candidatePaths = [
+      path.join(ROOT, 'companion-android/app/build/outputs/apk/release/app-release.apk'),
+      path.join(ROOT, 'downloads/sakkupay-companion.apk')
+    ];
+    let apkPath = candidatePaths.find(cand => fs.existsSync(cand));
+
+    if (apkPath) {
+      const stat = fs.statSync(apkPath);
+      res.writeHead(200, {
+        'Content-Type': 'application/vnd.android.package-archive',
+        'Content-Length': stat.size,
+        'Content-Disposition': 'attachment; filename="sakkupay-companion-v1.0.apk"',
+        'Cache-Control': 'private, no-cache, no-store, must-revalidate'
+      });
+      if (method === 'HEAD') {
+        return res.end();
+      }
+      return fs.createReadStream(apkPath).pipe(res);
+    } else {
+      return json(res, 404, {
+        available: false,
+        name: 'SakkuPay Merchant Companion',
+        version: '1.0',
+        packageName: 'in.sakkupay.companion',
+        message: 'Companion APK is not available on this server host.'
+      });
+    }
   }
 
   /* ── Automated Payment Verification Webhook (Android Companion) ── */
@@ -2147,10 +2237,20 @@ async function route(req, res) {
 
   if (p === '/api/profile') {
     if (method === 'GET') return json(res, 200, merchantSafe(m));
-    if (method === 'PUT') {
+    if (method === 'PUT' || method === 'PATCH') {
       let b = await read(req);
       const partial = {};
-      for (let k of ['businessName', 'supportEmail', 'description']) if (typeof b[k] === 'string') partial[k] = b[k].trim();
+      if (typeof b.businessName === 'string') {
+        const bn = b.businessName.trim();
+        if (bn.length < 2) return json(res, 400, { error: 'Business name must be at least 2 characters long' });
+        partial.businessName = bn;
+      }
+      if (typeof b.supportEmail === 'string') {
+        const se = b.supportEmail.trim();
+        if (se && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(se)) return json(res, 400, { error: 'Please enter a valid customer support email address' });
+        partial.supportEmail = se;
+      }
+      if (typeof b.description === 'string') partial.description = b.description.trim();
       if (typeof b.whatsappNumber === 'string') {
         let number = b.whatsappNumber.replace(/\D/g, '');
         if (number && !/^\d{10}$/.test(number)) return json(res, 400, { error: 'Enter a 10-digit WhatsApp number' });
@@ -2234,6 +2334,8 @@ async function route(req, res) {
     }
   }
 
+  const ALLOWED_TEMPLATES = new Set(['classic', 'minimal', 'premium-dark', 'modern-gradient', 'compact-upi']);
+
   if (p === '/api/links') {
     if (method === 'GET') return json(res, 200, repository.links.findByMerchant(m.id));
     if (method === 'POST') {
@@ -2241,25 +2343,38 @@ async function route(req, res) {
       const mUpis = repository.upis.findByMerchant(m.id);
       let upi = (b.upiId && mUpis.find(u => u.id === b.upiId)) || mUpis.find(x => x.default) || mUpis[0] ||
         (db.upis && db.upis.find(x => x.merchantId === m.id && x.default));
-      if (!b.name) return json(res, 400, { error: 'Product or payment title is required' });
+      if (!b.name || !String(b.name).trim()) return json(res, 400, { error: 'Product or payment title is required' });
       if (!upi) return json(res, 400, { error: 'Please connect a receiving UPI account first before creating a payment link' });
       let amountType = b.amountType === 'open' ? 'open' : 'fixed', amount = Number(b.amount);
       if (amountType === 'fixed' && (!Number.isFinite(amount) || amount <= 0)) return json(res, 400, { error: 'A valid fixed amount greater than ₹0 is required' });
+      
+      const template = (b.template && ALLOWED_TEMPLATES.has(b.template)) ? b.template : 'classic';
+      const rawSlug = (b.slug || b.name).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40);
+      const cleanSlug = uniqueSlug(rawSlug || 'pay');
+
       let link = {
         id: id('lnk'),
         merchantId: m.id,
         upiId: upi.upiId,
         name: b.name.trim(),
         description: (b.description || '').trim(),
-        slug: uniqueSlug(b.slug || b.name),
+        slug: cleanSlug,
         amount: amountType === 'fixed' ? amount : null,
         amountType,
+        template,
         active: true,
         createdAt: new Date().toISOString()
       };
       link = repository.links.create(link);
       db.links.unshift(link);
       persist();
+
+      const host = req.headers['host'] || 'localhost:3000';
+      const proto = req.headers['x-forwarded-proto'] || (host.includes('localhost') ? 'http' : 'https');
+      const baseUrl = process.env.APP_URL ? process.env.APP_URL.replace(/\/$/, '') : `${proto}://${host}`;
+      link.url = `${baseUrl}/pay/${link.slug}`;
+      link.fullUrl = link.url;
+
       return json(res, 201, link);
     }
   }
@@ -2269,12 +2384,23 @@ async function route(req, res) {
     if (!link || link.merchantId !== m.id) return json(res, 404, { error: 'Payment link not found' });
     if (method === 'PATCH') {
       let b = await read(req);
-      if (typeof b.active === 'boolean') {
-        link = repository.links.update(link.id, { active: b.active });
-        const inMem = db.links.find(x => x.id === link.id);
-        if (inMem) inMem.active = b.active;
-      }
+      const updates = {};
+      if (typeof b.active === 'boolean') updates.active = b.active;
+      if (typeof b.name === 'string' && b.name.trim()) updates.name = b.name.trim();
+      if (typeof b.description === 'string') updates.description = b.description.trim();
+      if (typeof b.template === 'string' && ALLOWED_TEMPLATES.has(b.template)) updates.template = b.template;
+
+      link = repository.links.update(link.id, updates);
+      const inMem = db.links.find(x => x.id === link.id);
+      if (inMem) Object.assign(inMem, link);
       persist();
+
+      const host = req.headers['host'] || 'localhost:3000';
+      const proto = req.headers['x-forwarded-proto'] || (host.includes('localhost') ? 'http' : 'https');
+      const baseUrl = process.env.APP_URL ? process.env.APP_URL.replace(/\/$/, '') : `${proto}://${host}`;
+      link.url = `${baseUrl}/pay/${link.slug}`;
+      link.fullUrl = link.url;
+
       return json(res, 200, link);
     }
     if (method === 'DELETE') {
@@ -2283,6 +2409,38 @@ async function route(req, res) {
       persist();
       return json(res, 204, {});
     }
+  }
+
+  /* ── Merchant Support Queries ── */
+  if (p === '/api/support/query' && method === 'POST') {
+    let b = await read(req);
+    const subject = (b.subject || '').trim();
+    const message = (b.message || '').trim();
+    const category = (b.category || 'general').trim();
+    if (!subject) return json(res, 400, { error: 'Support query subject is required' });
+    if (!message) return json(res, 400, { error: 'Support query message is required' });
+
+    const query = repository.supportQueries.create({
+      id: id('sup'),
+      merchantId: m.id,
+      category,
+      subject,
+      message,
+      status: 'open',
+      createdAt: new Date().toISOString()
+    });
+
+    return json(res, 201, {
+      success: true,
+      ticketId: query.id,
+      query,
+      message: `Support ticket #${query.id} created successfully. Our engineering team has received your inquiry.`
+    });
+  }
+
+  if (p === '/api/support/queries' && method === 'GET') {
+    const list = repository.supportQueries.findByMerchant(m.id);
+    return json(res, 200, list);
   }
 
   if (method === 'GET' && p === '/api/transactions') {
@@ -2373,11 +2531,26 @@ async function route(req, res) {
 /* ─── Static File Server ────────────────────────────────────────────────────── */
 function staticFile(req, res) {
   let p = req.url.split('?')[0];
-  if (p.startsWith('/pay/')) p = '/checkout.html';
+  if (p === '/pay' || p === '/pay/' || p.startsWith('/pay/')) {
+    const sub = p.startsWith('/pay/') ? p.slice(5) : '';
+    // If the browser requested a static asset inside /pay/ (e.g. /pay/checkout.js, /pay/styles.css)
+    if (sub && (sub === 'checkout.js' || sub === 'styles.css' || sub === 'app-extra.css' || sub.endsWith('.js') || sub.endsWith('.css') || sub.endsWith('.svg') || sub.endsWith('.png') || sub.endsWith('.ico'))) {
+      p = '/' + sub;
+    } else {
+      p = '/checkout.html';
+    }
+  }
   else if (p === '/' || p === '/home' || p === '/home.html') p = '/home.html';
   else if (p === '/login' || p === '/login.html') p = '/login.html';
   else if (p === '/dashboard' || p === '/dashboard.html' || p === '/index.html') p = '/dashboard.html';
   else if (p === '/admin' || p === '/admin/' || p === '/admin/index.html' || p === '/admin.html') p = '/admin.html';
+
+  // Security: Protect downloads and internal files from unauthenticated static exposure
+  if (p.startsWith('/downloads/') || p.endsWith('.apk') || p.endsWith('.db') || p.endsWith('.sqlite') || p.includes('.env')) {
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Forbidden', message: 'Direct static access prohibited. Use protected API endpoints.' }));
+  }
+
   let target = path.normalize(path.join(ROOT, p));
   if (!target.startsWith(ROOT) || !fs.existsSync(target) || fs.statSync(target).isDirectory()) {
     res.writeHead(404);
@@ -2390,7 +2563,7 @@ function staticFile(req, res) {
 /* ─── HTTP Server Instance ──────────────────────────────────────────────────── */
 const server = http.createServer((req, res) => {
   applySecurityHeaders(res);
-  if (req.url.startsWith('/api/')) {
+  if (req.url.startsWith('/api/') || req.url.startsWith('/downloads/')) {
     route(req, res).catch(e => {
       const isPayloadTooLarge = e.message === 'Payload too large';
       if (!isPayloadTooLarge) console.error(e);

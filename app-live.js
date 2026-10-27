@@ -158,8 +158,10 @@ function go(page) {
   if (page === 'transactions') loadTransactions();
   if (page === 'links') renderLinks();
   if (page === 'upi') renderUpis();
+  if (page === 'support') loadSupportQueries();
 
   $('.sidebar')?.classList.remove('open');
+  $('#sidebar-backdrop')?.classList.remove('active');
   window.scrollTo(0, 0);
 }
 
@@ -168,9 +170,6 @@ $$('.nav[data-page]').forEach(btn => { btn.onclick = () => go(btn.dataset.page);
 $$('[data-goto]').forEach(el => { el.onclick = () => go(el.dataset.goto); });
 
 // Sidebar click-throughs
-const _helpBtn = $('#help-card-btn');
-if (_helpBtn) _helpBtn.onclick = () => modal('help-modal', true);
-
 const _profileBtn = $('#profile-sidebar-btn');
 if (_profileBtn) _profileBtn.onclick = () => go('settings');
 
@@ -356,16 +355,138 @@ function openLinkModal() {
   modal('link-modal', true);
 }
 
+/* Template Gallery Helpers (Phase 2) */
+function templateLabel(t) {
+  const map = {
+    'classic': 'SakkuPay Classic',
+    'minimal': 'Minimal Clean',
+    'premium-dark': 'Premium Onyx',
+    'modern-gradient': 'Modern Gradient',
+    'compact-upi': 'UPI Express'
+  };
+  return map[t] || 'SakkuPay Classic';
+}
+
+function selectLinkTemplate(template) {
+  const hiddenInput = $('#link-template');
+  if (hiddenInput) hiddenInput.value = template;
+  $$('#template-options-grid .template-option-card').forEach(card => {
+    card.classList.toggle('active', card.dataset.template === template);
+  });
+}
+
+function previewCurrentTemplate() {
+  const template = $('#link-template')?.value || 'classic';
+  const name = ($('#link-name')?.value || '').trim() || 'Sample Product Checkout';
+  const amountVal = $('#link-amount')?.value;
+  const type = $('#link-type')?.value || 'fixed';
+  const amountStr = type === 'fixed' && Number(amountVal) > 0 ? money(Number(amountVal)) : 'Customer Decides';
+
+  renderInteractivePreview(template, name, amountStr);
+}
+
+function openSwitchTemplateModal(id) {
+  const l = links.find(x => x.id === id);
+  if (!l) return;
+  const idInput = $('#switch-template-link-id');
+  const nameLabel = $('#switch-template-link-name');
+  const selInput = $('#switch-template-selected');
+
+  if (idInput) idInput.value = l.id;
+  if (nameLabel) nameLabel.textContent = l.name;
+  const currentTemplate = l.template || 'classic';
+  if (selInput) selInput.value = currentTemplate;
+
+  $$('#switch-template-options-grid .template-option-card').forEach(card => {
+    card.classList.toggle('active', card.dataset.template === currentTemplate);
+  });
+
+  modal('template-modal', true);
+}
+
+function selectSwitchTemplate(t) {
+  const selInput = $('#switch-template-selected');
+  if (selInput) selInput.value = t;
+  $$('#switch-template-options-grid .template-option-card').forEach(card => {
+    card.classList.toggle('active', card.dataset.template === t);
+  });
+}
+
+async function saveSwitchedTemplate() {
+  const id = $('#switch-template-link-id')?.value;
+  const template = $('#switch-template-selected')?.value || 'classic';
+  if (!id) return;
+
+  const btn = $('#save-switch-template-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  try {
+    await api('/links/' + id, {
+      method: 'PATCH',
+      body: JSON.stringify({ template })
+    });
+    modal('template-modal', false);
+    toast('🎉 Checkout template updated successfully!');
+    await refresh();
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Apply Template Changes'; }
+  }
+}
+
+function renderInteractivePreview(template, name, amountStr) {
+  const container = $('#template-preview-container');
+  if (!container) return;
+
+  const bizName = currentProfile?.businessName || 'SakkuPay Merchant';
+  const isMinimal = template === 'minimal';
+  const isDark = template === 'premium-dark';
+  const isGradient = template === 'modern-gradient';
+
+  container.innerHTML = `
+    <div style="padding:26px 20px;text-align:center;background:${isMinimal ? '#FFFFFF' : isDark ? '#0D1117' : isGradient ? 'rgba(22, 27, 46, 0.95)' : '#111827'};color:${isMinimal ? '#0F172A' : '#FFFFFF'}">
+      <div style="display:flex;justify-content:center;gap:6px;margin-bottom:12px">
+        <span class="template-badge">${templateLabel(template)}</span>
+        <span class="upi-secure-badge">● Direct UPI</span>
+      </div>
+      <p style="font-size:11px;font-weight:700;color:${isMinimal ? '#64748B' : 'var(--muted)'};margin:0;text-transform:uppercase;letter-spacing:1px">PAYING TO</p>
+      <h3 style="font-size:14px;margin:2px 0 6px;color:${isMinimal ? '#0F172A' : isDark ? '#10B981' : isGradient ? '#C084FC' : '#818CF8'}">${escapeHtml(bizName)}</h3>
+      <h2 style="font-size:19px;font-weight:800;margin:0 0 14px;color:${isMinimal ? '#0F172A' : '#FFFFFF'}">${escapeHtml(name)}</h2>
+
+      <div style="background:${isMinimal ? '#F8FAFC' : isDark ? 'rgba(16,185,129,0.06)' : isGradient ? 'rgba(255,255,255,0.05)' : '#161F30'};border:1.5px ${isGradient ? 'dashed' : 'solid'} ${isMinimal ? '#E2E8F0' : isDark ? 'rgba(16,185,129,0.3)' : isGradient ? 'rgba(192,132,252,0.4)' : 'rgba(255,255,255,0.1)'};border-radius:14px;padding:12px;margin-bottom:14px">
+        <span style="font-size:10px;text-transform:uppercase;color:${isMinimal ? '#64748B' : 'var(--muted)'};font-weight:700;display:block;margin-bottom:2px">AMOUNT TO PAY</span>
+        <strong style="font-size:26px;font-weight:800;color:${isMinimal ? '#0F172A' : isDark ? '#34D399' : isGradient ? '#F472B6' : '#FFFFFF'}">${amountStr}</strong>
+      </div>
+
+      <div style="width:120px;height:120px;margin:0 auto 14px;background:#FFFFFF;border-radius:12px;padding:8px;display:grid;place-items:center;box-shadow:0 4px 14px rgba(0,0,0,0.3)">
+        <div style="font-size:10.5px;font-weight:700;color:#0F172A;text-align:center">📱 Dynamic UPI QR</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+        <div style="padding:6px 2px;border-radius:6px;background:${isMinimal ? '#F1F5F9' : '#161F30'};font-size:10.5px;font-weight:700">GPay</div>
+        <div style="padding:6px 2px;border-radius:6px;background:${isMinimal ? '#F1F5F9' : '#161F30'};font-size:10.5px;font-weight:700">PhonePe</div>
+        <div style="padding:6px 2px;border-radius:6px;background:${isMinimal ? '#F1F5F9' : '#161F30'};font-size:10.5px;font-weight:700">Paytm</div>
+        <div style="padding:6px 2px;border-radius:6px;background:${isMinimal ? '#F1F5F9' : '#161F30'};font-size:10.5px;font-weight:700">BHIM</div>
+      </div>
+    </div>
+  `;
+
+  modal('template-preview-modal', true);
+}
+
 /* Link Form Submit */
 const linkForm = $('#link-form');
 if (linkForm) {
   linkForm.onsubmit = async e => {
     e.preventDefault();
     const name = ($('#link-name')?.value || '').trim();
+    const description = ($('#link-description')?.value || '').trim();
     const type = $('#link-type')?.value || 'fixed';
     const amountVal = $('#link-amount')?.value;
     const slug = ($('#link-slug')?.value || '').trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-');
     const upiId = $('#link-upi-select')?.value;
+    const template = $('#link-template')?.value || 'classic';
 
     if (!name) { toast('Please provide a title for what you are collecting for.', true); return; }
     if (type === 'fixed' && (!amountVal || Number(amountVal) <= 0)) { toast('Please enter a valid fixed amount in Rupees (₹).', true); return; }
@@ -375,7 +496,15 @@ if (linkForm) {
     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Generating…'; }
 
     try {
-      const payload = { name, amountType: type, amount: type === 'fixed' ? Number(amountVal) : null, slug, upiId };
+      const payload = {
+        name,
+        description,
+        amountType: type,
+        amount: type === 'fixed' ? Number(amountVal) : null,
+        slug,
+        upiId,
+        template
+      };
       const created = await api('/links', { method: 'POST', body: JSON.stringify(payload) });
       toast('🎉 Payment link generated successfully!');
       modal('link-modal', false);
@@ -396,10 +525,10 @@ function renderLinks() {
 
   const query = ($('#link-search-input')?.value || '').toLowerCase().trim();
   const statusFilter = $('#link-status-filter')?.value || 'all';
-  const host = window.location.host || 'sakkupay.onrender.com';
+  const origin = window.location.origin || 'https://sakkupay.onrender.com';
 
   let filtered = links.filter(l => {
-    if (query && !`${l.name} ${l.slug} ${l.amount || ''}`.toLowerCase().includes(query)) return false;
+    if (query && !`${l.name} ${l.slug} ${l.amount || ''} ${l.template || ''}`.toLowerCase().includes(query)) return false;
     if (statusFilter === 'active' && !l.active) return false;
     if (statusFilter === 'inactive' && l.active) return false;
     return true;
@@ -408,7 +537,7 @@ function renderLinks() {
   if (!filtered.length) {
     if (!links.length) {
       tbody.innerHTML = `
-        <tr><td colspan="6" style="padding:0">
+        <tr><td colspan="7" style="padding:0">
           <div class="empty-placeholder">
             <div class="empty-icon-wrap">↗</div>
             <h3>No payment links created yet</h3>
@@ -419,7 +548,7 @@ function renderLinks() {
       `;
     } else {
       tbody.innerHTML = `
-        <tr><td colspan="6" style="padding:0">
+        <tr><td colspan="7" style="padding:0">
           <div class="empty-placeholder">
             <div class="empty-icon-wrap" style="color:#A5B4FC">⌕</div>
             <h3>No matching payment links found</h3>
@@ -435,12 +564,16 @@ function renderLinks() {
       const statusBadge = l.active
         ? '<span class="pill success"><span class="dot"></span> Active</span>'
         : '<span class="pill inactive"><span class="dot"></span> Inactive</span>';
+      const templateName = l.template || 'classic';
+      const templateBadge = `<span class="pill" style="background:rgba(99,102,241,0.12);color:#A5B4FC;border:1px solid rgba(99,102,241,0.25)">🎨 ${escapeHtml(templateLabel(templateName))}</span>`;
+
       return `
         <tr>
           <td>
             <b>${escapeHtml(l.name)}</b><br>
-            <small class="muted" style="font-family:monospace">${host}/pay/${escapeHtml(l.slug)}</small>
+            <small class="muted" style="font-family:monospace">${origin}/pay/${escapeHtml(l.slug)}</small>
           </td>
+          <td>${templateBadge}</td>
           <td>${l.amountType === 'fixed' ? 'Fixed Price' : 'Customer Decides'}</td>
           <td><b>${l.amount ? money(l.amount) : 'Open Amount'}</b></td>
           <td><b style="color:#10B981">${money(collected)}</b></td>
@@ -448,6 +581,7 @@ function renderLinks() {
           <td>
             <button class="text copy-link" data-slug="${l.slug}" data-id="${l.id}">Copy Link</button>
             <button class="text view-qr" data-id="${l.id}">QR Code</button>
+            <button class="text change-template" data-id="${l.id}">Template</button>
             <button class="text preview" data-slug="${l.slug}">Preview ↗</button>
             <button class="text toggle-link" data-id="${l.id}" data-active="${l.active}">${l.active ? 'Deactivate' : 'Activate'}</button>
             <button class="text delete-link" data-id="${l.id}" style="color:#FCA5A5">Delete</button>
@@ -668,6 +802,10 @@ document.addEventListener('click', async e => {
   if (e.target.classList.contains('view-qr')) {
     const l = links.find(x => x.id === id);
     if (l) showQrModal(l);
+  }
+
+  if (e.target.classList.contains('change-template')) {
+    openSwitchTemplateModal(id);
   }
 
   if (e.target.classList.contains('copy-link')) {
@@ -1053,7 +1191,22 @@ async function saveSettings() {
   const saveBtn = $('#save-settings-btn');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
 
+  const bName = ($('#business-name')?.value || '').trim();
+  const sEmail = ($('#support-email')?.value || '').trim();
   const waRaw = ($('#whatsapp-number')?.value || '').replace(/\D/g, '');
+
+  if (bName.length < 2) {
+    toast('Business display name must be at least 2 characters long.', true);
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Profile Changes'; }
+    return;
+  }
+
+  if (sEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sEmail)) {
+    toast('Please enter a valid customer support email address.', true);
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Profile Changes'; }
+    return;
+  }
+
   if (waRaw && !/^\d{10}$/.test(waRaw)) {
     toast('Please enter a valid 10-digit mobile number.', true);
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Profile Changes'; }
@@ -1061,8 +1214,8 @@ async function saveSettings() {
   }
 
   const body = {
-    businessName: ($('#business-name')?.value || '').trim(),
-    supportEmail: ($('#support-email')?.value || '').trim(),
+    businessName: bName,
+    supportEmail: sEmail,
     description: ($('#business-description')?.value || '').trim(),
     whatsappNumber: waRaw
   };
@@ -1070,11 +1223,123 @@ async function saveSettings() {
   try {
     const updated = await api('/profile', { method: 'PUT', body: JSON.stringify(body) });
     updateProfileUI(updated);
-    toast('Profile updated successfully!');
+    toast('🎉 Business profile updated successfully!');
   } catch (err) {
     toast(err.message, true);
   } finally {
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Profile Changes'; }
+  }
+}
+
+/* ─── Merchant Support Queries (Phase 4) ───────────────────────────────────── */
+async function submitSupportQuery() {
+  const btn = $('#support-submit-btn');
+  const feedback = $('#support-submit-feedback');
+  const category = $('#support-query-category')?.value || 'general';
+  const subject = ($('#support-query-subject')?.value || '').trim();
+  const message = ($('#support-query-message')?.value || '').trim();
+
+  if (!subject) { toast('Please enter a subject for your inquiry.', true); return; }
+  if (!message) { toast('Please write your support message.', true); return; }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+  if (feedback) feedback.textContent = '';
+
+  try {
+    const res = await api('/support/query', {
+      method: 'POST',
+      body: JSON.stringify({ category, subject, message })
+    });
+    toast(`Inquiry registered successfully! Ticket #${res.ticketId}`);
+    if (feedback) {
+      feedback.style.color = '#34D399';
+      feedback.textContent = `✓ Ticket #${res.ticketId} Created`;
+    }
+    const subjEl = $('#support-query-subject');
+    const msgEl = $('#support-query-message');
+    if (subjEl) subjEl.value = '';
+    if (msgEl) msgEl.value = '';
+    await loadSupportQueries();
+  } catch (err) {
+    toast(err.message, true);
+    if (feedback) {
+      feedback.style.color = '#F87171';
+      feedback.textContent = 'Submission failed';
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit Support Inquiry →'; }
+  }
+}
+
+async function loadSupportQueries() {
+  const container = $('#support-ticket-list');
+  if (!container) return;
+
+  try {
+    const list = await api('/support/queries');
+    if (!Array.isArray(list) || !list.length) {
+      container.innerHTML = '<p style="font-size:12px;color:var(--muted);margin:0">No registered support inquiries. Submit an inquiry above if you require engineering assistance.</p>';
+      return;
+    }
+
+    container.innerHTML = list.map(q => `
+      <div style="background:var(--card-inner);border:1px solid var(--line);border-radius:10px;padding:12px 14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <span style="font-family:monospace;font-size:11.5px;color:#A5B4FC;font-weight:700">#${escapeHtml(q.id)}</span>
+          <span class="pill" style="font-size:10px;padding:2px 8px;background:rgba(99,102,241,0.15);color:#A5B4FC">${escapeHtml(q.status || 'open')}</span>
+        </div>
+        <strong style="font-size:13px;color:#FFFFFF;display:block;margin-bottom:2px">${escapeHtml(q.subject)}</strong>
+        <p style="font-size:12px;color:var(--muted);margin:0;line-height:1.4">${escapeHtml(q.message)}</p>
+        <small style="font-size:10.5px;color:#64748B;display:block;margin-top:6px">${new Date(q.createdAt).toLocaleString()}</small>
+      </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = '<p style="font-size:12px;color:var(--muted);margin:0">Unable to load ticket history.</p>';
+  }
+}
+
+/* ─── Companion APK Download (Phase 5) ─────────────────────────────────────── */
+async function downloadCompanionApk() {
+  const btn = $('#btn-download-apk');
+  const initialText = btn ? btn.innerHTML : '<span>⇩ Download Android APK</span>';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span>Authenticating & Downloading…</span>'; }
+
+  try {
+    const currentToken = token || resolveAuthToken();
+    const headers = {};
+    if (currentToken) {
+      headers['Authorization'] = 'Bearer ' + currentToken;
+    }
+
+    const res = await fetch('/api/companion/download', { headers });
+    const contentType = res.headers.get('content-type') || '';
+
+    if (res.status === 401) {
+      toast('🔒 Please sign in to download the Companion APK.');
+      modal('login-modal', true);
+      return;
+    }
+
+    if (res.ok && (contentType.includes('application/vnd.android.package-archive') || contentType.includes('octet-stream'))) {
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'sakkupay-companion-v1.0.apk';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast('🎉 SakkuPay Companion APK downloaded successfully!');
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast(data.message || 'Companion APK not yet available on server.');
+      modal('companion-build-modal', true);
+    }
+  } catch (e) {
+    modal('companion-build-modal', true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = initialText; }
   }
 }
 
