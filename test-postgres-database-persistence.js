@@ -103,6 +103,33 @@ async function runTests() {
     pass('Production startup with DB_PATH selects persistent disk volume');
   }
 
+  // 4. Production with relative DB_PATH must fail (Render ephemeral container protection)
+  {
+    const oldEnv = process.env.NODE_ENV;
+    const oldDbPath = process.env.DB_PATH;
+    const oldDbUrl = process.env.DATABASE_URL;
+
+    process.env.NODE_ENV = 'production';
+    delete process.env.DATABASE_URL;
+    process.env.DB_PATH = './sakkupay.db';
+
+    let threw = false;
+    try {
+      validateDatabaseConfiguration();
+    } catch (e) {
+      threw = true;
+      assert(e.message.includes('absolute path'));
+    } finally {
+      process.env.NODE_ENV = oldEnv;
+      if (oldDbPath) process.env.DB_PATH = oldDbPath;
+      else delete process.env.DB_PATH;
+      if (oldDbUrl) process.env.DATABASE_URL = oldDbUrl;
+    }
+
+    assert(threw, 'Production startup with relative DB_PATH must throw');
+    pass('Production startup with relative DB_PATH rejects ephemeral container disk');
+  }
+
   // --------------------------------------------------------------------------
   // Section 2: PostgreSQL Schema Migrations Verification
   // --------------------------------------------------------------------------

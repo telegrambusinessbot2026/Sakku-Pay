@@ -6,6 +6,7 @@
    ============================================================================== */
 'use strict';
 
+const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 
@@ -16,7 +17,9 @@ try {
   // pg is optional in local dev when DATABASE_URL is not set
 }
 
-const DEFAULT_DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../sakkupay.db');
+function getResolvedDbPath() {
+  return process.env.DB_PATH ? path.resolve(process.env.DB_PATH) : path.join(__dirname, '../../sakkupay.db');
+}
 
 /**
  * Validates database environment configuration for production safety.
@@ -32,12 +35,26 @@ function validateDatabaseConfiguration() {
       'CRITICAL [SakkuPay Production Database Validation Failed]:',
       'Production deployment requires durable persistence to prevent data loss across container restarts.',
       'Configure either:',
-      '  1. DATABASE_URL: Managed PostgreSQL connection string (Recommended for Render)',
-      '  2. DB_PATH: Absolute path to a mounted Render Persistent Disk (e.g., /var/data/sakkupay.db)',
+      '  1. DB_PATH: Absolute path to a mounted Render Persistent Disk (e.g., /var/data/sakkupay.db) [Recommended for current synchronous SQLite architecture]',
+      '  2. DATABASE_URL: Managed PostgreSQL connection string (Requires completing async repository layer)',
       'Silent fallback to an unmounted, ephemeral database is strictly prohibited.'
     ].join('\n');
     console.error(errorMsg);
     throw new Error('Missing required persistent database configuration in production.');
+  }
+
+  if (isProduction && hasPersistentDisk && !hasDatabaseUrl) {
+    const configuredPath = process.env.DB_PATH.trim();
+    if (!path.isAbsolute(configuredPath)) {
+      const errorMsg = [
+        'CRITICAL [SakkuPay Production Database Validation Failed]:',
+        `DB_PATH "${configuredPath}" is a relative path.`,
+        'In production on Render, DB_PATH must be an absolute path pointing to a mounted persistent volume (e.g., /var/data/sakkupay.db).',
+        'Relative paths reside on ephemeral container storage that resets on every redeployment.'
+      ].join('\n');
+      console.error(errorMsg);
+      throw new Error('In production, DB_PATH must be an absolute path to a mounted persistent disk.');
+    }
   }
 
   return {
@@ -75,8 +92,23 @@ function getPostgresPool(connectionString = process.env.DATABASE_URL) {
   return pgPoolInstance;
 }
 
-function createDatabaseConnection(dbPath = DEFAULT_DB_PATH) {
-  const db = new DatabaseSync(dbPath);
+function createDatabaseConnection(customPath) {
+  // Validate persistence configuration before opening or creating database
+  validateDatabaseConfiguration();
+
+  const targetPath = customPath ? path.resolve(customPath) : getResolvedDbPath();
+  const parentDir = path.dirname(targetPath);
+
+  if (!fs.existsSync(parentDir)) {
+    try {
+      fs.mkdirSync(parentDir, { recursive: true });
+    } catch (err) {
+      console.error(`[SakkuPay Database] Failed to create database directory ${parentDir}:`, err.message);
+      throw new Error(`Database directory not accessible: ${parentDir}`);
+    }
+  }
+
+  const db = new DatabaseSync(targetPath);
 
   // WAL mode for concurrent reads while writing, foreign keys for referential integrity
   db.exec('PRAGMA journal_mode = WAL;');
@@ -109,5 +141,5 @@ module.exports = {
   getPostgresPool,
   getDatabaseEngine,
   validateDatabaseConfiguration,
-  DEFAULT_DB_PATH
+  getResolvedDbPath
 };

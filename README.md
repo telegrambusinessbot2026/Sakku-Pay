@@ -336,15 +336,17 @@ run().catch(err => { console.error('Migration failed:', err); process.exit(1); }
 
 Before deploying SakkuPay to Render, complete the following steps:
 
-- [ ] **1. Create Render PostgreSQL Instance:**
-  - Create a new PostgreSQL database on Render (`sakkupay-db`).
-  - Copy the **Internal Database URL**.
+- [ ] **1. Attach Render Persistent Disk to Web Service:**
+  - In your Render Web Service dashboard, navigate to **Disks** -> click **Add Disk**.
+  - Name: `sakkupay-data`
+  - Mount Path: `/var/data` (Must be an absolute path)
+  - Size: `1 GB` (or more based on transaction volume)
 - [ ] **2. Configure Web Service Environment Variables on Render:**
   - `NODE_ENV`: `production`
-  - `PORT`: (Auto-injected by Render)
+  - `PORT`: (Auto-injected by Render, leave unset)
   - `APP_URL`: `https://sakkupay.onrender.com`
   - `TRUST_PROXY`: `true`
-  - `DATABASE_URL`: `postgres://...` (or attach Persistent Disk and set `DB_PATH=/var/data/sakkupay.db`)
+  - `DB_PATH`: `/var/data/sakkupay.db` (Must point to the mounted persistent volume)
   - `SAKKUPAY_TOKEN_SECRET`: Random 32+ character string (`openssl rand -hex 32`)
   - `VAULT_SECRET`: Random 32+ character string (`openssl rand -hex 32`)
   - `ADMIN_USERNAME`: Custom administrative username

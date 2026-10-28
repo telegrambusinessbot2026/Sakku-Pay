@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const { getDatabase } = require('./src/db/connection');
+const { getDatabase, validateDatabaseConfiguration } = require('./src/db/connection');
 const { migrateJsonToSqlite } = require('./src/db/migrate');
 const { getRepository } = require('./src/db/repository');
 const {
@@ -32,7 +32,12 @@ const { logAdminAudit, sanitizeAuditState } = require('./src/services/adminAudit
 let wa = null;
 try { wa = require('./admin-whatsapp'); } catch(e) { console.warn('WhatsApp module not loaded:', e.message); }
 
-const ROOT = __dirname, STORE = process.env.DATA_JSON_PATH ? path.resolve(process.env.DATA_JSON_PATH) : path.join(ROOT, 'data.json');
+const ROOT = __dirname;
+// On persistent disk mounts, place data.json fallback in the same durable volume
+const defaultStorePath = process.env.DB_PATH && path.isAbsolute(process.env.DB_PATH)
+  ? path.join(path.dirname(process.env.DB_PATH), 'data.json')
+  : path.join(ROOT, 'data.json');
+const STORE = process.env.DATA_JSON_PATH ? path.resolve(process.env.DATA_JSON_PATH) : defaultStorePath;
 const mime = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
@@ -42,6 +47,9 @@ const mime = {
   '.png': 'image/png',
   '.ico': 'image/x-icon'
 };
+
+// Validate database persistence configuration before opening database
+validateDatabaseConfiguration();
 
 const sqliteDb = getDatabase();
 // Atomic, repeatable migration from data.json to SQLite on server boot
@@ -88,10 +96,10 @@ function validateProductionEnvironment() {
     errors.push('ADMIN_PASSWORD must be explicitly set to a secure password of at least 12 characters in production.');
   }
 
-  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.trim());
-  const hasPersistentDisk = Boolean(process.env.DB_PATH && process.env.DB_PATH.trim());
-  if (!hasDatabaseUrl && !hasPersistentDisk) {
-    errors.push('Production database persistence required: Set DATABASE_URL for managed PostgreSQL (recommended on Render) or DB_PATH for persistent disk storage. Ephemeral SQLite fallback is strictly disallowed in production.');
+  try {
+    validateDatabaseConfiguration();
+  } catch (err) {
+    errors.push(err.message);
   }
 
   if (errors.length > 0) {
