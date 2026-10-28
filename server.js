@@ -88,6 +88,12 @@ function validateProductionEnvironment() {
     errors.push('ADMIN_PASSWORD must be explicitly set to a secure password of at least 12 characters in production.');
   }
 
+  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.trim());
+  const hasPersistentDisk = Boolean(process.env.DB_PATH && process.env.DB_PATH.trim());
+  if (!hasDatabaseUrl && !hasPersistentDisk) {
+    errors.push('Production database persistence required: Set DATABASE_URL for managed PostgreSQL (recommended on Render) or DB_PATH for persistent disk storage. Ephemeral SQLite fallback is strictly disallowed in production.');
+  }
+
   if (errors.length > 0) {
     console.error('CRITICAL [SakkuPay Security]: Missing or insecure secrets in production:');
     for (const e of errors) console.error('  - ' + e);

@@ -478,7 +478,7 @@ function createRepository(db = getDatabase()) {
         stmts.linkInsert.run(
           link.id,
           link.merchantId,
-          link.upiId,
+          link.upiId || null,
           link.name,
           link.description || null,
           link.slug,
