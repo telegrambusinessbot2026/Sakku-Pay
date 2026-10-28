@@ -1593,3 +1593,1080 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ==============================================================================
+   SakkuPay — Multiple Payment Page Templates (Phase 2)
+   ============================================================================== */
+
+/* ── Common Template Enhancements ── */
+.badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.template-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #A5B4FC;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+.upi-secure-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34D399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   TEMPLATE 1: CLASSIC (Default Dark / Indigo Fintech)
+   ────────────────────────────────────────────────────────────────────────────── */
+body.checkout-page.template-classic {
+  background: radial-gradient(circle at 50% 15%, rgba(99, 102, 241, 0.15) 0%, #0B0F17 65%);
+}
+body.checkout-page.template-classic .public-checkout {
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 25px 60px -10px rgba(0, 0, 0, 0.8), 0 0 30px rgba(99, 102, 241, 0.12);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   TEMPLATE 2: MINIMAL CLEAN (Monochrome Studio Light)
+   ────────────────────────────────────────────────────────────────────────────── */
+body.checkout-page.template-minimal {
+  background: #F8FAFC;
+  background-image: radial-gradient(#E2E8F0 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: #0F172A;
+}
+body.checkout-page.template-minimal #checkout-logo-header img {
+  filter: invert(1) brightness(0.2);
+}
+body.checkout-page.template-minimal .public-checkout {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 20px 45px -10px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(0, 0, 0, 0.03);
+  border-radius: 20px;
+  color: #0F172A;
+}
+body.checkout-page.template-minimal .template-badge {
+  background: #F1F5F9;
+  color: #475569;
+  border-color: #CBD5E1;
+}
+body.checkout-page.template-minimal .upi-secure-badge {
+  background: #ECFDF5;
+  color: #059669;
+  border-color: #A7F3D0;
+}
+body.checkout-page.template-minimal .eyebrow {
+  color: #64748B;
+}
+body.checkout-page.template-minimal .merchant-title {
+  color: #0F172A;
+  font-weight: 800;
+}
+body.checkout-page.template-minimal .item-title {
+  color: #0F172A;
+}
+body.checkout-page.template-minimal .pay-desc {
+  color: #64748B;
+}
+body.checkout-page.template-minimal .public-amount {
+  background: #F8FAFC;
+  border: 1.5px solid #E2E8F0;
+}
+body.checkout-page.template-minimal .public-amount > span,
+body.checkout-page.template-minimal .public-amount label span {
+  color: #64748B;
+}
+body.checkout-page.template-minimal .public-amount strong {
+  color: #0F172A;
+}
+body.checkout-page.template-minimal .currency-prefix {
+  color: #0F172A;
+}
+body.checkout-page.template-minimal #pay-amount {
+  color: #0F172A;
+  border-bottom-color: #0F172A;
+}
+body.checkout-page.template-minimal .qr-container {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+}
+body.checkout-page.template-minimal .download-qr-btn {
+  background: #FFFFFF;
+  color: #0F172A;
+  border: 1px solid #CBD5E1;
+}
+body.checkout-page.template-minimal .download-qr-btn:hover {
+  background: #F1F5F9;
+  border-color: #94A3B8;
+}
+body.checkout-page.template-minimal .or-divider span {
+  background: #FFFFFF;
+  color: #94A3B8;
+}
+body.checkout-page.template-minimal .or-divider::before {
+  background: #E2E8F0;
+}
+body.checkout-page.template-minimal .app-btn {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  color: #0F172A;
+}
+body.checkout-page.template-minimal .app-btn:hover {
+  background: #F1F5F9;
+  border-color: #0F172A;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+body.checkout-page.template-minimal .public-status {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  color: #475569;
+}
+body.checkout-page.template-minimal .toggle-utr-btn {
+  color: #475569;
+}
+body.checkout-page.template-minimal .toggle-utr-btn:hover {
+  color: #0F172A;
+}
+body.checkout-page.template-minimal .utr-form {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+}
+body.checkout-page.template-minimal .utr-help-text {
+  color: #64748B;
+}
+body.checkout-page.template-minimal #utr-input {
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  color: #0F172A;
+}
+body.checkout-page.template-minimal .btn-submit-utr {
+  background: #0F172A;
+  color: #FFFFFF;
+}
+body.checkout-page.template-minimal .secured {
+  color: #94A3B8;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   TEMPLATE 3: PREMIUM DARK (Onyx & Emerald Luxury)
+   ────────────────────────────────────────────────────────────────────────────── */
+body.checkout-page.template-premium-dark {
+  background: #07090C;
+  background-image: radial-gradient(circle at 50% 12%, rgba(16, 185, 129, 0.14) 0%, transparent 65%);
+  font-family: 'Space Grotesk', 'DM Sans', sans-serif;
+}
+body.checkout-page.template-premium-dark .public-checkout {
+  background: #0D1117;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  box-shadow: 0 30px 70px -10px rgba(0, 0, 0, 0.95), 0 0 35px rgba(16, 185, 129, 0.16);
+  border-radius: 22px;
+}
+body.checkout-page.template-premium-dark .template-badge {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34D399;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+body.checkout-page.template-premium-dark .merchant-title {
+  color: #10B981;
+  letter-spacing: 1.2px;
+}
+body.checkout-page.template-premium-dark .public-amount {
+  background: rgba(16, 185, 129, 0.05);
+  border: 1.5px solid rgba(16, 185, 129, 0.28);
+}
+body.checkout-page.template-premium-dark .public-amount strong {
+  color: #34D399;
+  text-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+}
+body.checkout-page.template-premium-dark .currency-prefix {
+  color: #10B981;
+}
+body.checkout-page.template-premium-dark #pay-amount {
+  color: #34D399;
+  border-bottom-color: #10B981;
+}
+body.checkout-page.template-premium-dark .app-btn:hover {
+  border-color: #10B981;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.2);
+}
+body.checkout-page.template-premium-dark .download-qr-btn {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #34D399;
+}
+body.checkout-page.template-premium-dark .download-qr-btn:hover {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: #10B981;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   TEMPLATE 4: MODERN GRADIENT (Cyberpunk Glassmorphism Aura)
+   ────────────────────────────────────────────────────────────────────────────── */
+body.checkout-page.template-modern-gradient {
+  background: linear-gradient(135deg, #18182E 0%, #2A103D 50%, #0D1117 100%);
+  background-attachment: fixed;
+}
+body.checkout-page.template-modern-gradient .public-checkout {
+  background: rgba(22, 27, 46, 0.72);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.75), 0 0 40px rgba(192, 132, 252, 0.22);
+  border-radius: 24px;
+}
+body.checkout-page.template-modern-gradient .template-badge {
+  background: rgba(192, 132, 252, 0.18);
+  color: #E879F9;
+  border-color: rgba(192, 132, 252, 0.35);
+}
+body.checkout-page.template-modern-gradient .merchant-title {
+  color: #C084FC;
+}
+body.checkout-page.template-modern-gradient .public-amount {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px dashed rgba(192, 132, 252, 0.4);
+}
+body.checkout-page.template-modern-gradient .public-amount strong {
+  color: #F472B6;
+  text-shadow: 0 0 20px rgba(244, 114, 182, 0.4);
+}
+body.checkout-page.template-modern-gradient .currency-prefix {
+  color: #C084FC;
+}
+body.checkout-page.template-modern-gradient #pay-amount {
+  color: #F472B6;
+  border-bottom-color: #E879F9;
+}
+body.checkout-page.template-modern-gradient .app-btn:hover {
+  border-color: #C084FC;
+  box-shadow: 0 0 18px rgba(192, 132, 252, 0.3);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   TEMPLATE 5: COMPACT UPI (Mobile-First UPI Express)
+   ────────────────────────────────────────────────────────────────────────────── */
+body.checkout-page.template-compact-upi .public-checkout {
+  width: min(410px, 100%);
+  padding: 26px 20px;
+}
+body.checkout-page.template-compact-upi .apps-grid-express {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+body.checkout-page.template-compact-upi .apps-grid-express .app-btn {
+  padding: 12px 14px;
+  font-weight: 700;
+  border-radius: 12px;
+}
+body.checkout-page.template-compact-upi .qr-accordion {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 6px;
+}
+
+/* ==============================================================================
+   SakkuPay — Sidebar UI/UX Redesign & Navigation Enhancements (Phase 3)
+   ============================================================================== */
+.sidebar {
+  width: 250px;
+  background: #0D1117;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px 16px;
+  box-shadow: 2px 0 20px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sidebar .nav-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-right: 2px;
+  margin-bottom: 12px;
+}
+
+/* Sleek custom scrollbar */
+.sidebar .nav-list::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar .nav-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar .nav-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}
+.sidebar .nav-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.sidebar .nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #94A3B8;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.sidebar .nav .nav-icon {
+  font-size: 16px;
+  width: 22px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+  color: #64748B;
+  transition: color 0.18s ease;
+}
+
+.sidebar .nav:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #FFFFFF;
+}
+.sidebar .nav:hover .nav-icon {
+  color: #A5B4FC;
+}
+
+.sidebar .nav:focus-visible {
+  outline: 2px solid #818CF8;
+  outline-offset: -1px;
+}
+
+.sidebar .nav.active {
+  background: rgba(99, 102, 241, 0.14);
+  color: #A5B4FC;
+  border-color: rgba(99, 102, 241, 0.35);
+  font-weight: 700;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.12);
+}
+.sidebar .nav.active .nav-icon {
+  color: #818CF8;
+}
+
+.sidebar .side-end {
+  margin-top: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 10px;
+  flex-shrink: 0;
+}
+
+.sidebar .profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.sidebar .profile:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 95;
+  transition: opacity 0.25s ease;
+}
+
+@media (max-width: 820px) {
+  .sidebar {
+    transform: translateX(-100%);
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    display: flex;
+  }
+  .sidebar-backdrop.active {
+    display: block;
+  }
+  main.main-area {
+    margin-left: 0 !important;
+  }
+}
+
+/* ==============================================================================
+   SakkuPay — Template Selection Gallery UI (Phase 2)
+   ============================================================================== */
+.template-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 10px 0 16px;
+}
+
+.template-option-card {
+  background: #111827;
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.template-option-card:hover {
+  background: #161F30;
+  border-color: rgba(99, 102, 241, 0.4);
+  transform: translateY(-2px);
+}
+
+.template-option-card.active {
+  background: #151D2E;
+  border-color: #818CF8;
+  box-shadow: 0 0 16px rgba(99, 102, 241, 0.25);
+}
+
+.template-option-card.active::after {
+  content: "✓";
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #4F46E5;
+  color: #FFFFFF;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.template-thumb {
+  width: 100%;
+  height: 60px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.thumb-badge {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 8.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #FFFFFF;
+}
+
+.template-thumb-classic {
+  background: radial-gradient(circle at 50% 20%, #312E81 0%, #0F172A 80%);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.template-thumb-minimal {
+  background: #F8FAFC;
+  border: 1px solid #CBD5E1;
+}
+.template-thumb-minimal .thumb-badge {
+  background: #E2E8F0;
+  color: #0F172A;
+}
+
+.template-thumb-premium-dark {
+  background: #080A0D;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+.template-thumb-premium-dark .thumb-badge {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34D399;
+}
+
+.template-thumb-modern-gradient {
+  background: linear-gradient(135deg, #2E0854 0%, #17112A 100%);
+  border: 1px solid rgba(192, 132, 252, 0.4);
+}
+
+.template-thumb-compact-upi {
+  background: #0D1117;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+}
+
+.thumb-qr {
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  background: #FFFFFF;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.thumb-apps {
+  display: flex;
+  gap: 3px;
+}
+.thumb-apps::before, .thumb-apps::after {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: #4F46E5;
+}
+.thumb-apps::after {
+  background: #10B981;
+}
+
+.template-option-card strong {
+  font-size: 12.5px;
+  color: #FFFFFF;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.template-option-card small {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+/* ==============================================================================
+   SakkuPay — Support Page Styles (Phase 4)
+   ============================================================================== */
+.support-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #34D399;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  padding: 6px 14px;
+  border-radius: 20px;
+}
+.support-status-badge .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10B981;
+  box-shadow: 0 0 8px #10B981;
+}
+
+.guide-card {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.guide-card:hover {
+  background: #161F30;
+  border-color: rgba(99, 102, 241, 0.35);
+  transform: translateY(-2px);
+}
+
+.support-contact-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 14px;
+  background: #161F30;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.faq-item {
+  background: #161F30;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 14px 18px;
+  transition: all 0.2s ease;
+}
+.faq-item[open] {
+  background: #182236;
+  border-color: rgba(99, 102, 241, 0.25);
+}
+.faq-item summary {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #FFFFFF;
+  cursor: pointer;
+  outline: none;
+}
+.faq-answer {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  padding-top: 10px;
+}
+
+/* ─── Robust Public Checkout Lifecycle States (Task Fix) ─── */
+.checkout-loading-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 44px 20px;
+  text-align: center;
+}
+
+.checkout-spinner {
+  width: 42px;
+  height: 42px;
+  border: 3px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #6366F1;
+  border-radius: 50%;
+  animation: checkout-spin 0.8s linear infinite;
+  margin-bottom: 18px;
+}
+
+@keyframes checkout-spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #F8FAFC;
+  margin: 0 0 6px;
+}
+
+.loading-subtitle {
+  font-size: 13px;
+  color: #94A3B8;
+  margin: 0;
+}
+
+.checkout-state-card {
+  padding: 34px 22px;
+  text-align: center;
+  background: var(--card-inner, #161F30);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: 16px;
+  margin: 12px 0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.checkout-state-icon {
+  font-size: 40px;
+  margin-bottom: 14px;
+  line-height: 1;
+}
+
+.checkout-state-title {
+  font-size: 19px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: #F8FAFC;
+}
+
+.checkout-state-desc {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #94A3B8;
+  max-width: 380px;
+  margin: 0 auto 18px;
+}
+
+.checkout-state-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 14px;
+}
+
+.checkout-state-badge.badge-not-found {
+  background: rgba(245, 158, 11, 0.15);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.checkout-state-badge.badge-inactive {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.checkout-state-badge.badge-error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.checkout-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #6366F1, #4F46E5);
+  color: #FFFFFF;
+  font-weight: 600;
+  font-size: 13.5px;
+  padding: 10px 22px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.checkout-retry-btn:hover {
+  background: linear-gradient(135deg, #4F46E5, #4338CA);
+  transform: translateY(-1px);
+}
+
+/* ==============================================================================
+   SakkuPay — Master Dashboard UI & Glitch-Free Layout Styling
+   ============================================================================== */
+
+/* Navigation Icons & Item Styling */
+.nav-svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  flex-shrink: 0;
+  transition: transform 0.15s ease, stroke 0.15s ease;
+}
+.nav:hover .nav-svg {
+  stroke: #A5B4FC;
+  transform: scale(1.06);
+}
+.nav.active .nav-svg {
+  stroke: #818CF8;
+}
+
+/* Workspace Card */
+.workspace {
+  padding: 10px 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: #111827;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  min-width: 0;
+}
+.workspace:hover {
+  background: #161F30;
+  border-color: rgba(99, 102, 241, 0.35);
+}
+.workspace-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #4F46E5 0%, #6366F1 100%);
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
+}
+.workspace-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.workspace-info strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #FFFFFF;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+.workspace-subtitle {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+.workspace-action-icon {
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+.workspace:hover .workspace-action-icon {
+  color: #A5B4FC;
+  transform: translateX(2px);
+}
+
+/* Bottom Sidebar Profile & Sign Out Button */
+.profile-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.25);
+}
+.profile-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.profile-details strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #FFFFFF;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+.profile-details small {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+.logout-icon-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+.logout-icon-btn:hover {
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Glitch-Free Topbar & Settlement Indicator */
+.topbar {
+  min-height: 56px;
+  height: auto;
+  background: var(--sidebar);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.settlement-status-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+.live-settlement-badge {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34D399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 14px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  letter-spacing: 0.3px;
+}
+.settlement-divider {
+  color: rgba(255, 255, 255, 0.2);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.header-merchant-name {
+  font-size: 13px;
+  color: #CBD5E1;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+  min-width: 0;
+}
+.top-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.top-actions button {
+  padding: 8px 14px;
+  font-size: 12.5px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.btn-short { display: none; }
+.btn-full { display: inline; }
+
+@media (max-width: 768px) {
+  .topbar { padding: 8px 16px; }
+  .header-merchant-name { max-width: 140px; }
+  .top-actions button { padding: 6px 10px; font-size: 12px; }
+}
+@media (max-width: 480px) {
+  .btn-full { display: none; }
+  .btn-short { display: inline; }
+  .settlement-divider { display: none; }
+  .header-merchant-name { display: none; }
+}
+
+/* Settings Sub-Navigation & Profile Tabs */
+.settings-tabs-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+.settings-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.settings-tab-btn:hover {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.04);
+}
+.settings-tab-btn.active {
+  color: #FFFFFF;
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.35);
+}
+.settings-tab-btn svg {
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+.settings-tab-content {
+  display: none;
+}
+.settings-tab-content.active {
+  display: block;
+}
+
+/* Profile Live Preview Card */
+.profile-preview-card {
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.8) 0%, rgba(30, 41, 59, 0.7) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 12px;
+  padding: 18px 16px;
+  margin-top: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+.profile-preview-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #4F46E5 0%, #6366F1 100%);
+  color: #FFFFFF;
+  font-size: 15px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}

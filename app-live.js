@@ -144,14 +144,74 @@ function triggerButtonCopyFeedback(btn, originalText) {
   }, 1800);
 }
 
-/* ─── SPA Router ───────────────────────────────────────────────────────────── */
-function go(page) {
+/* ─── SPA Router & Navigation ─────────────────────────────────────────────────── */
+const VALID_PAGES = ['overview', 'links', 'upi', 'transactions', 'companion', 'developers', 'settings', 'support'];
+
+function normalizePage(p) {
+  if (!p) return 'overview';
+  p = p.toLowerCase().trim();
+  if (p === 'developer' || p === 'api') return 'developers';
+  if (VALID_PAGES.includes(p)) return p;
+  return 'overview';
+}
+
+function getActivePageFromUrl() {
+  // 1. Check hash: e.g. #links, #settings, #transactions
+  if (window.location.hash) {
+    const h = window.location.hash.replace(/^#\/?/, '').trim();
+    // If hash contains OAuth token params like access_token=..., do not treat as page
+    if (!h.includes('=') && !h.includes('&')) {
+      return normalizePage(h);
+    }
+  }
+  // 2. Check query param: ?page=links
+  if (window.location.search) {
+    const sp = new URLSearchParams(window.location.search);
+    const p = sp.get('page');
+    if (p) return normalizePage(p);
+  }
+  // 3. Check pathname: /dashboard/links
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  if (parts.length >= 2 && parts[0] === 'dashboard') {
+    return normalizePage(parts[1]);
+  }
+  return 'overview';
+}
+
+function go(page, pushHistory = true) {
+  page = normalizePage(page);
+
   // ONLY toggle .active class — never innerHTML, never re-render DOM sections
   $$('.page').forEach(p => p.classList.remove('active'));
   const target = $('#' + page);
   if (target) target.classList.add('active');
 
   $$('.nav').forEach(b => b.classList.toggle('active', b.dataset.page === page));
+
+  // Push / replace history state for browser Back / Forward support
+  if (pushHistory) {
+    const currentHash = (window.location.hash || '').replace(/^#\/?/, '').toLowerCase();
+    if (currentHash !== page) {
+      try {
+        history.pushState({ page }, '', '#' + page);
+      } catch {
+        window.location.hash = '#' + page;
+      }
+    }
+  }
+
+  // Update document title
+  const titleMap = {
+    overview: 'Dashboard Overview',
+    links: 'Payment Links',
+    upi: 'UPI Accounts',
+    transactions: 'Transactions',
+    companion: 'Companion App',
+    developers: 'Developer API',
+    settings: 'Settings & Profile',
+    support: 'Merchant Support'
+  };
+  document.title = (titleMap[page] || 'Merchant Portal') + ' — SakkuPay';
 
   // Lazy-load page data only when needed
   if (page === 'developers') loadApiKeys();
@@ -163,6 +223,27 @@ function go(page) {
   $('.sidebar')?.classList.remove('open');
   $('#sidebar-backdrop')?.classList.remove('active');
   window.scrollTo(0, 0);
+}
+
+// Browser Back & Forward event listeners
+window.addEventListener('popstate', e => {
+  const page = (e.state && e.state.page) ? e.state.page : getActivePageFromUrl();
+  go(page, false);
+});
+
+window.addEventListener('hashchange', () => {
+  const page = getActivePageFromUrl();
+  if (page) go(page, false);
+});
+
+function handleLogoutClick(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  if (confirm('Are you sure you want to sign out of your SakkuPay merchant account?')) {
+    logout('user_action');
+  }
 }
 
 /* ─── Nav wiring ───────────────────────────────────────────────────────────── */
@@ -1133,7 +1214,49 @@ async function revokeApiKey(keyId) {
   }
 }
 
-/* ─── Profile UI ───────────────────────────────────────────────────────────── */
+/* ─── Profile UI & Settings Tabs ─────────────────────────────────────────── */
+function switchSettingsTab(tab) {
+  const isProfile = tab === 'profile';
+  $('#tab-btn-profile')?.classList.toggle('active', isProfile);
+  $('#tab-btn-profile')?.setAttribute('aria-selected', isProfile ? 'true' : 'false');
+  $('#tab-btn-security')?.classList.toggle('active', !isProfile);
+  $('#tab-btn-security')?.setAttribute('aria-selected', !isProfile ? 'true' : 'false');
+
+  $('#settings-tab-profile')?.classList.toggle('active', isProfile);
+  $('#settings-tab-security')?.classList.toggle('active', !isProfile);
+}
+
+function updateProfilePreview() {
+  const bName = ($('#business-name')?.value || '').trim() || currentProfile?.businessName || 'Merchant Store';
+  const sEmail = ($('#support-email')?.value || '').trim() || currentProfile?.supportEmail || 'support@yourstore.in';
+  const waNum = ($('#whatsapp-number')?.value || '').trim() || currentProfile?.whatsappNumber || 'Not configured';
+
+  const avatarText = bName.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'SK';
+
+  if ($('#preview-avatar')) $('#preview-avatar').textContent = avatarText;
+  if ($('#preview-biz-name')) $('#preview-biz-name').textContent = bName;
+  if ($('#preview-support-email')) $('#preview-support-email').textContent = sEmail;
+  if ($('#preview-whatsapp')) $('#preview-whatsapp').textContent = waNum;
+}
+
+let previewDebounceTimer = null;
+function updateProfilePreviewDebounced() {
+  clearTimeout(previewDebounceTimer);
+  previewDebounceTimer = setTimeout(updateProfilePreview, 100);
+}
+
+function copyMerchantId() {
+  const id = currentProfile?.id || $('#sec-id')?.textContent;
+  if (!id || id === '—') return;
+  const btn = $('#btn-copy-merchant-id');
+  navigator.clipboard?.writeText(id).then(() => {
+    triggerButtonCopyFeedback(btn, 'Copy ID');
+    toast('Merchant ID copied to clipboard!');
+  }).catch(() => {
+    toast('Merchant ID: ' + id);
+  });
+}
+
 function updateProfileUI(profile) {
   if (!profile) return;
   currentProfile = profile;
@@ -1180,6 +1303,9 @@ function updateProfileUI(profile) {
   if (desc && profile.description) desc.value = profile.description;
   if (wanum && profile.whatsappNumber) wanum.value = profile.whatsappNumber;
 
+  // Update checkout branding preview card
+  updateProfilePreview();
+
   // Security card
   if ($('#sec-email')) $('#sec-email').textContent = profile.email || '—';
   if ($('#sec-id')) $('#sec-id').textContent = profile.id || '—';
@@ -1189,29 +1315,45 @@ function updateProfileUI(profile) {
 /* ─── Save Settings ────────────────────────────────────────────────────────── */
 async function saveSettings() {
   const saveBtn = $('#save-settings-btn');
-  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+  const feedbackEl = $('#profile-inline-feedback');
+  if (feedbackEl) {
+    feedbackEl.style.display = 'none';
+    feedbackEl.className = 'feedback-banner';
+    feedbackEl.textContent = '';
+  }
 
   const bName = ($('#business-name')?.value || '').trim();
   const sEmail = ($('#support-email')?.value || '').trim();
   const waRaw = ($('#whatsapp-number')?.value || '').replace(/\D/g, '');
 
-  if (bName.length < 2) {
-    toast('Business display name must be at least 2 characters long.', true);
+  function showInlineError(msg) {
+    if (feedbackEl) {
+      feedbackEl.style.display = 'block';
+      feedbackEl.style.background = 'rgba(239, 68, 68, 0.12)';
+      feedbackEl.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+      feedbackEl.style.color = '#FCA5A5';
+      feedbackEl.textContent = '⚠ ' + msg;
+    }
+    toast(msg, true);
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Profile Changes'; }
+  }
+
+  if (bName.length < 2) {
+    showInlineError('Business display name must be at least 2 characters long.');
     return;
   }
 
   if (sEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sEmail)) {
-    toast('Please enter a valid customer support email address.', true);
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Profile Changes'; }
+    showInlineError('Please enter a valid customer support email address.');
     return;
   }
 
   if (waRaw && !/^\d{10}$/.test(waRaw)) {
-    toast('Please enter a valid 10-digit mobile number.', true);
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Profile Changes'; }
+    showInlineError('Please enter a valid 10-digit mobile number.');
     return;
   }
+
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
 
   const body = {
     businessName: bName,
@@ -1223,9 +1365,16 @@ async function saveSettings() {
   try {
     const updated = await api('/profile', { method: 'PUT', body: JSON.stringify(body) });
     updateProfileUI(updated);
+    if (feedbackEl) {
+      feedbackEl.style.display = 'block';
+      feedbackEl.style.background = 'rgba(16, 185, 129, 0.12)';
+      feedbackEl.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+      feedbackEl.style.color = '#6EE7B7';
+      feedbackEl.textContent = '✓ Business profile saved successfully. Public checkout pages updated.';
+    }
     toast('🎉 Business profile updated successfully!');
   } catch (err) {
-    toast(err.message, true);
+    showInlineError(err.message || 'Failed to update business profile.');
   } finally {
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Profile Changes'; }
   }
@@ -1417,6 +1566,10 @@ function logout(reason = 'session_expired') {
 async function boot() {
   token = resolveAuthToken();
   if (!token) { logout('no_session'); return; }
+
+  // Resolve and activate initial page from URL (hash, query, or path)
+  const initialPage = getActivePageFromUrl();
+  go(initialPage, false);
 
   try {
     const profile = await api('/profile');

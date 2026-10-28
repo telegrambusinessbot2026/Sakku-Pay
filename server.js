@@ -2542,7 +2542,7 @@ function staticFile(req, res) {
   }
   else if (p === '/' || p === '/home' || p === '/home.html') p = '/home.html';
   else if (p === '/login' || p === '/login.html') p = '/login.html';
-  else if (p === '/dashboard' || p === '/dashboard.html' || p === '/index.html') p = '/dashboard.html';
+  else if (p === '/dashboard' || p === '/dashboard.html' || p === '/index.html' || p.startsWith('/dashboard/')) p = '/dashboard.html';
   else if (p === '/admin' || p === '/admin/' || p === '/admin/index.html' || p === '/admin.html') p = '/admin.html';
 
   // Security: Protect downloads and internal files from unauthenticated static exposure
