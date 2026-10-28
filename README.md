@@ -1,235 +1,397 @@
-# SakkuPay - Multi-UPI Payment Gateway & Verification Engine
+# SakkuPay — Multi-UPI Payment Gateway & Cashier Verification Engine
 
-SakkuPay is a production-ready, full-stack multi-UPI payment gateway, custom payment link generator, and automated payment verification engine built with pure Node.js, standard web technologies, and a native Android Companion background service.
+[![Node Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
+[![License](https://img.shields.io/badge/license-Proprietary-blue.svg)]()
+[![Automated Tests](https://img.shields.io/badge/tests-586%20passed-success.svg)]()
+[![Build APK](https://img.shields.io/badge/Android%20Companion-v1.0-blueviolet.svg)]()
 
----
-
-## ⚡ Core Features
-
-- **Google Account Authentication:** 1-click merchant sign-in with zero OTP or KYC friction.
-- **Multi-UPI Management:** Connect, verify, and manage multiple receiving UPI IDs per merchant with mandatory linked phone numbers and primary default selection.
-- **Dynamic Payment Links:** Generate custom slugs for fixed amounts (e.g. ₹499 for products) or open amounts (customer enters amount).
-- **Responsive Checkout Page (`/pay/:slug`):**
-  - **Dynamic Realistic QR Code:** Scannable in any UPI app with pre-filled amount and recipient details, plus image download.
-  - **1-Tap UPI Intent Buttons:** Instant redirects to Google Pay, PhonePe, Paytm, and BHIM (`upi://pay?...`).
-  - **Real-Time Payment Status Polling:** Automatically detects confirmation and updates to a verified success state.
-- **Dual Automated Payment Verification Engine:**
-  - **Direct Business Account Linking:** Connect **PhonePe Business** and **Paytm Business** accounts with encrypted credential vaulting (AES-256-GCM) and direct server-to-server webhook callbacks.
-  - **Universal Fallback (Android Companion App):** A lightweight background Android service (`companion-android`) that reads incoming payment alerts from GPay for Business, PhonePe Business, Paytm Business, and Bank SMS (SBI, HDFC, ICICI, etc.) and forwards them securely to the SakkuPay webhook.
-- **Real-Time SSE Sync:** Live Server-Sent Events (`transaction.updated`) update the merchant dashboard instantly the second a payment arrives.
-- **Developer API & Webhooks:** Generate secret API keys (`sk_live_...`) to programmatically create payment links from external e-commerce stores, websites, or Telegram bots.
-- **Restricted Admin Dashboard (`/admin`):**
-  - Platform-wide volume, transaction statistics, and active link metrics.
-  - User management (search, suspend/unsuspend, delete merchants).
-  - Diagnostic error tracking for client-side issues.
-  - Admin WhatsApp QR session integration (Baileys) for automated merchant notifications.
+> [!WARNING]
+> **PRODUCTION DEPLOYMENT & MIGRATION NOTICE**
+> The changes on this branch (`feat/cashier-pairing-and-verification`) represent the audited pre-deployment release. **Production deployment to Render and production database migration are NOT yet executed.** Review the [Render Deployment Preparation Checklist](#-render-deployment-preparation-checklist) before triggering production builds or merging into `main`.
 
 ---
 
-## 🚀 Quick Start
+## 📌 Table of Contents
 
-### 1. Requirements
-- **Node.js:** `>= 20.0.0`
-- **Android Studio / JDK 17+** *(optional, only needed for compiling the Android companion app)*
+1. [Project Overview & Architecture](#-project-overview--architecture)
+2. [Current Application Components](#-current-application-components)
+3. [Prerequisites & Runtime Versions](#-prerequisites--runtime-versions)
+4. [Installation & Local Development](#-installation--local-development)
+5. [Starting the Server & Running Tests](#-starting-the-server--running-tests)
+6. [Android Companion APK Build & Delivery](#-android-companion-apk-build--delivery)
+7. [Cashier Pairing Workflow (Two-Stage Protocol)](#-cashier-pairing-workflow-two-stage-protocol)
+8. [Payment Verification Mechanisms & Limitations](#-payment-verification-mechanisms--limitations)
+9. [Database Architecture: SQLite vs PostgreSQL](#-database-architecture-sqlite-vs-postgresql)
+10. [Database Migration Procedure](#-database-migration-procedure)
+11. [Render Deployment Preparation Checklist](#-render-deployment-preparation-checklist)
+12. [Environment Variables Reference](#-environment-variables-reference)
+13. [Security Precautions & Troubleshooting](#-security-precautions--troubleshooting)
 
-### 2. Install Dependencies
+---
+
+## ⚡ Project Overview & Architecture
+
+**SakkuPay** is a high-performance UPI payment link gateway, merchant management portal, and automated payment verification engine built with pure Node.js, standard web standards, and an official native Android Companion application.
+
+### Key Architectural Pillars:
+- **Zero-Redirect Friction:** Merchants receive instant UPI payments directly into their own bank VPAs without costly gateway aggregator middleman fees or KYC delays.
+- **Settlement Truth & Non-Repudiation:** Transactions remain strictly `pending` until verified through cryptographic webhook signatures (PhonePe/Paytm) or verified Android notification listener alerts. Merchants cannot self-approve payments.
+- **Two-Stage Cashier Pairing:** Secure pairing of physical Android store devices to merchant accounts using single-use 12-digit Server Codes and 6-digit App Codes with brute-force defense.
+- **Dual-Driver Persistence:** Local SQLite via Node.js v22+ `node:sqlite` in WAL mode alongside managed PostgreSQL migrations and connection pooling.
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   SakkuPay Architecture                                │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+        │                                      │                                │
+ ┌──────▼──────┐                        ┌──────▼──────┐                  ┌──────▼──────┐
+ │  Customer   │                        │   Merchant  │                  │  Android    │
+ │  Checkout   │                        │  Dashboard  │                  │  Companion  │
+ │ (/pay/:slug)│                        │ (/dashboard)│                  │     APK     │
+ └──────┬──────┘                        └──────┬──────┘                  └──────┬──────┘
+        │ Deep-Link UPI Intent                 │ Bearer Token / SSE             │ Ingests Bank SMS
+        │ Real QR Code                         │ 8 Dedicated Views              │ & UPI Alerts
+        ▼                                      ▼                                ▼
+ ┌──────────────────────────────────────────────────────────────────────────────────────┐
+ │                        SakkuPay Node.js Server (server.js)                           │
+ │                                                                                      │
+ │  • Router & Static Server      • Two-Stage Cashier Pairing Protocol                  │
+ │  • HMAC-SHA256 Auth & RBAC     • Inbound Webhook Reconciler (paymentLifecycle.js)     │
+ │  • AES-256-GCM Credential Vault• IP Sliding-Window Rate Limiters                     │
+ └──────────────────────────────────────────┬───────────────────────────────────────────┘
+                                            │
+                     ┌──────────────────────┴──────────────────────┐
+                     ▼                                             ▼
+          ┌─────────────────────┐                       ┌─────────────────────┐
+          │  SQLite Database    │                       │ Managed PostgreSQL  │
+          │  (node:sqlite, WAL) │                       │  (pg Pool, SSL)     │
+          │  sakkupay.db        │                       │  DATABASE_URL       │
+          └─────────────────────┘                       └─────────────────────┘
+```
+
+---
+
+## 🧩 Current Application Components
+
+| Component | Path / Location | Purpose |
+|---|---|---|
+| **Core HTTP Server** | [`server.js`](file:///D:/SakkuPay/server.js) | Pure Node.js REST API, webhooks, SSE event bus, and security middleware. |
+| **Merchant SPA Router** | [`app-live.js`](file:///D:/SakkuPay/app-live.js) | Full client-side router, cashier manager, profile editor, and metrics sync. |
+| **Merchant Dashboard** | [`dashboard.html`](file:///D:/SakkuPay/dashboard.html) | Responsive dashboard featuring 8 distinct sections (Collect Apps, Ledger, Links, etc.). |
+| **Customer Checkout** | [`checkout.html`](file:///D:/SakkuPay/checkout.html) & [`checkout.js`](file:///D:/SakkuPay/checkout.js) | Public payment UI with real QR rendering, UPI intent triggers, and status polling. |
+| **Admin Control Center** | [`admin.html`](file:///D:/SakkuPay/admin.html) & [`admin.js`](file:///D:/SakkuPay/admin.js) | Platform-wide ledger, investigation timeline, RBAC staff manager, and audit diffs. |
+| **Android Companion App** | [`companion-android/`](file:///D:/SakkuPay/companion-android/) | Kotlin Android app for two-stage pairing and background UPI notification ingestion. |
+| **Database Modules** | [`src/db/`](file:///D:/SakkuPay/src/db/) | Connection pooling, SQLite schema, PostgreSQL migrations 1–5, and atomic migrator. |
+| **Domain Services** | [`src/services/`](file:///D:/SakkuPay/src/services/) | Payment lifecycle reconciler, admin audit logger, and RBAC permission checks. |
+
+---
+
+## 📋 Prerequisites & Runtime Versions
+
+- **Node.js:** `>= 20.0.0` (Recommended: Node.js `v22.x` for native `node:sqlite`).
+- **Package Manager:** `pnpm` (or `npm`).
+- **Git:** Standard git client.
+- **Android SDK & JDK 17+** *(Optional)*: Only required if building the native Android Companion app locally. Pre-built release binaries are included in the repository.
+
+---
+
+## 💻 Installation & Local Development
+
+### 1. Clone & Install Dependencies
 ```bash
+git clone https://github.com/telegrambusinessbot2026/Sakku-Pay.git
+cd SakkuPay
+
+# Install dependencies (pure Node.js with pg and qrcode)
 npm install
 ```
 
-### 3. Configure Environment Variables
-Create a `.env` file from `.env.example`:
+### 2. Configure Local Environment
+Copy the environment template:
 ```bash
 cp .env.example .env
 ```
-Configure your credentials in `.env` (Google OAuth, Session Secret, Vault Secret, Admin password).
+For local development, the default `.env` is pre-configured to run out-of-the-box using local SQLite (`./sakkupay.db`).
 
-### 4. Run the Server
+---
+
+## 🚀 Starting the Server & Running Tests
+
+### Start the Application
 ```bash
-# Development / Production
+# Start local development server
 npm start
 ```
 The server will start listening at:
-- **Home Landing Page:** [http://localhost:3000](http://localhost:3000)
-- **Merchant Login Page:** [http://localhost:3000/login](http://localhost:3000/login)
-- **User Dashboard:** [http://localhost:3000/dashboard](http://localhost:3000/dashboard)
-- **Admin Dashboard:** [http://localhost:3000/admin](http://localhost:3000/admin)
+- **Landing Page:** [http://localhost:3000](http://localhost:3000)
+- **Merchant Login:** [http://localhost:3000/login](http://localhost:3000/login)
+- **Merchant Dashboard:** [http://localhost:3000/dashboard](http://localhost:3000/dashboard)
+- **Admin Dashboard:** [http://localhost:3000/admin](http://localhost:3000/admin) (Default: `admin` / `changeme123`)
 
----
-
-## 🛠 Project Structure
-
-```
-SakkuPay/
-├── server.js               # Pure Node.js backend: REST API, Webhooks, SSE, AES-256 Vault
-├── src/                    # Backend modular architecture
-│   └── db/
-│       ├── connection.js   # SQLite DatabaseSync connection with WAL mode & foreign keys
-│       ├── schema.js       # Relational DDL tables, indexes, and constraints
-│       ├── migrate.js      # Atomic, transactional JSON-to-SQLite data migrator
-│       └── repository.js   # Repository/DAO pattern with prepared statements & integer paise
-├── test-milestone1.js      # Automated Security & Payment Verification test suite
-├── test-milestone2.js      # Automated SQLite Migration & Repository test suite
-├── home.html               # Public Home landing page with features, comparison & Privacy Policy
-├── home.css                # Modern responsive styles for the Home landing page
-├── login.html              # Dedicated Login page with Google OAuth button & status checks
-├── dashboard.html          # User Dashboard for authenticated merchants
-├── app-live.js             # Merchant dashboard client logic & state management
-├── admin.html              # Restricted Admin Dashboard SPA
-├── admin.js                # Admin management, WhatsApp session, error monitoring logic
-├── admin.css               # Admin portal styles
-├── checkout.html           # Customer payment page template with official branding
-├── checkout.js             # Customer checkout logic, QR rendering & live status polling
-├── assets/                 # Brand assets
-│   ├── logo.svg            # Official vector SVG logo
-│   └── logo-icon.svg       # Favicon and icon badge vector
-├── data.json               # Legacy JSON store (preserved as rollback backup & sync source)
-├── sakkupay.db             # Primary SQLite WAL database
-├── .env.example            # Environment configuration template
-│
-└── companion-android/      # Native Kotlin Android Companion App
-    └── app/src/main/
-        ├── AndroidManifest.xml
-        └── java/in/sakkupay/companion/
-            ├── MainActivity.kt               # Setup UI, status card & connection tester
-            ├── PaymentNotificationListener.kt # NotificationListenerService background hook
-            ├── PaymentParser.kt               # Debit rejection & universal UPI regex engine
-            └── Prefs.kt                       # Secure SharedPreferences manager
-```
-
----
-
-## 🔄 Automated Verification Engine (Dual Mode)
-
-SakkuPay provides two complementary verification methods to guarantee zero manual reconciliation:
-
-### Mode 1: Direct Business Gateway Linking
-1. Open the **"Link Business Accounts"** tab in the merchant dashboard.
-2. Click **"+ Link Account"** and select **PhonePe Business** or **Paytm Business**.
-3. Enter your Registered Mobile Number, Merchant ID (MID), and API Secret / Salt Key.
-4. Secrets are encrypted using **AES-256-GCM** before writing to disk; only masked representations (e.g. `secr••••••••z789`) are returned via API.
-5. Direct webhooks receive callbacks from providers:
-   - `POST /api/v1/webhook/phonepe`
-   - `POST /api/v1/webhook/paytm`
-6. Transactions verified this way receive the badge `⚡ PhonePe Direct` or `⚡ Paytm Direct`.
-
-### Mode 2: Android Companion App (Universal Fallback)
-For bank accounts, personal UPI handles, or apps without direct gateway APIs:
-1. Open `companion-android` in Android Studio and build/install the APK on the merchant's business phone.
-2. In the app:
-   - Enter your **Server URL** (`https://your-domain.com`).
-   - Enter your **Merchant ID** (found under the Developers or Link Business Accounts tab).
-   - Enter your secret **API Key** (`sk_live_...`).
-   - Tap **"Test Server Connection"** to verify credentials.
-   - Tap **"Open Notification Settings"** and grant Notification Access to the companion app.
-3. When customer payments arrive:
-   - [`PaymentParser.kt`](file:///companion-android/app/src/main/java/in/sakkupay/companion/PaymentParser.kt) filters out debits/outgoing notifications, extracts the exact amount and UTR, and sends a secure POST to `/api/v1/webhook/verify-payment`.
-   - The backend matches recent pending transactions (within 30 mins) or creates a direct record if paid without a checkout link.
-   - The transaction is marked `🤖 Companion Verified`.
-
----
-
-## 📡 REST API Reference
-
-### Public & Checkout Endpoints
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/pay/:slug` | Customer checkout interface. |
-| `GET` | `/api/checkout/:slug` | Public payment link metadata. |
-| `POST` | `/api/checkout/:slug/attempt` | Records initial payment attempt from a customer. |
-| `POST` | `/api/checkout/:slug/confirm` | Customer submits optional UTR reference. |
-| `GET` | `/api/checkout/:slug/status` | Polling endpoint for real-time customer status. |
-
-### Automated Webhooks (No Session Required)
-| Method | Endpoint | Auth | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/webhook/verify-payment` | `X-API-Key` | Companion connection ping & credential check. |
-| `POST` | `/api/v1/webhook/verify-payment` | `X-API-Key` | Companion app payment payload forwarding. |
-| `POST` | `/api/v1/webhook/phonepe` | Webhook / Signature | Direct PhonePe Business server-to-server callback. |
-| `POST` | `/api/v1/webhook/paytm` | Webhook / Signature | Direct Paytm Business server-to-server callback. |
-
-### Merchant Endpoints (Requires `Authorization: Bearer <token>`)
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/events` | Server-Sent Events stream for real-time dashboard updates. |
-| `GET` | `/api/dashboard` | Aggregated dashboard stats (volume, successful, pending, active links). |
-| `GET`, `PUT` | `/api/profile` | View or update business profile & WhatsApp contact. |
-| `GET`, `POST` | `/api/upis` | List or register receiving UPI destinations. |
-| `PATCH`, `DELETE`| `/api/upis/:id` | Set default UPI or remove account. |
-| `GET`, `POST` | `/api/links` | List or create custom payment links. |
-| `GET` | `/api/transactions` | Searchable transaction ledger with date-range filters. |
-| `GET`, `POST` | `/api/keys` | List or generate developer API keys (`sk_live_...`). |
-| `GET`, `POST` | `/api/business-accounts` | List or link PhonePe / Paytm business gateway accounts. |
-| `POST` | `/api/business-accounts/:id/test` | Test connectivity & sync status with gateway. |
-| `POST` | `/api/business-accounts/direct-verify`| Instantly verify a pending transaction using linked gateway credentials. |
-| `DELETE` | `/api/business-accounts/:id` | Disconnect a linked business account. |
-
-### Integration API (`X-API-Key: sk_live_...`)
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `POST` | `/api/integration/payment-links` | Programmatically generate a payment link from an external store/bot. |
-
-### Admin Endpoints (`Authorization: Bearer <admin_token>`)
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `POST` | `/api/admin/login` | Administrator authentication. |
-| `GET` | `/api/admin/overview` | Platform-wide volume, transaction, and user statistics. |
-| `GET`, `DELETE` | `/api/admin/merchants` | Manage registered merchants & accounts. |
-| `GET` | `/api/admin/transactions` | Global platform transaction ledger. |
-| `GET` | `/api/admin/errors` | Diagnostic client error monitor. |
-| `GET`, `POST` | `/api/admin/whatsapp/*` | Manage Baileys WhatsApp QR code connection & status. |
-
----
-
-## ⚙ Environment Variables
-
-| Variable | Required | Default | Purpose |
-| :--- | :---: | :--- | :--- |
-| `PORT` | Optional | `3000` | Port for the HTTP server. |
-| `SAKKUPAY_TOKEN_SECRET` | Recommended | `development-only-change-this-secret` | HMAC-SHA256 signature key for session tokens. |
-| `VAULT_SECRET` | Recommended | `sakkupay-vault-secret-key-2026` | 32-byte secret used for AES-256-GCM encryption of PhonePe/Paytm keys. |
-| `GOOGLE_CLIENT_ID` | Yes (for Auth) | None | Google Cloud OAuth 2.0 Client ID for merchant sign-in. |
-| `GOOGLE_CLIENT_SECRET` | Yes (for Auth) | None | Google Cloud OAuth 2.0 Client Secret. |
-| `GOOGLE_REDIRECT_URI` | Optional | `${origin}/api/auth/google/callback` | OAuth redirect URI registered in Google Cloud Console. |
-| `ADMIN_USERNAME` | Optional | `admin` | Username for accessing the restricted Admin Dashboard at `/admin`. |
-| `ADMIN_PASSWORD` | Optional | `changeme123` | Password for accessing the restricted Admin Dashboard at `/admin`. |
-| `DB_PATH` | Optional | `./sakkupay.db` | Path to SQLite database file. |
-
----
-
-## 🧪 Automated Testing
-
-SakkuPay includes five comprehensive automated test suites verifying payment cryptography, database persistence, state transitions, administrative control, and UI/UX integration:
+### Execute Automated Test Suites
+SakkuPay includes **14 test suites** (586 tests, 100% pass rate):
 
 ```bash
-# Run all test suites (455 automated tests)
+# Run all 6 core milestone regression suites (372 tests)
 npm test
 
-# Run Milestone 1 Security & Cryptography suite
-npm run test:m1
+# Run individual milestone suites:
+npm run test:m1   # Security, PhonePe/Paytm signatures, rate limiting
+npm run test:m2   # SQLite schema, foreign keys, paise math
+npm run test:m3   # Terminal state lock, out-of-order webhook delivery
+npm run test:m4   # Admin investigation drawer, audit diffs, staff RBAC
+npm run test:m5   # Merchant UI/UX, forensics drawer, payment links
+npm run test:m6   # Query token hardening (CWE-598), security headers
 
-# Run Milestone 2 SQLite Migration & Repository suite
-npm run test:m2
+# Run Cashier Pairing & Verification suite (16 tests)
+npm run test:cashier
 
-# Run Milestone 3 Payment Lifecycle & Reconciliation Hardening suite
-npm run test:m3
+# Run Managed PostgreSQL Persistence suite (10 tests)
+npm run test:persistence
 
-# Run Milestone 4 Admin Control Center & Audit Trail suite
-npm run test:m4
+# Run Authenticated Companion APK Download suite (9 tests)
+npm run test:companion
 
-# Run Milestone 5 UI/UX Redesign & Static/API Integration suite
-npm run test:m5
+# Run Dashboard Navigation & Profile suite (15 tests)
+npm run test:dashboard
+
+# Run Master Engineering & UI Upgrade suite (16 tests)
+npm run test:master
+
+# Run Merchant Fixes & Support Ticket suite (59 tests)
+npm run test:merchant
+
+# Run Payment Link Loading States & Retry suite (33 tests)
+npm run test:loading
+
+# Run 7-Viewport Multi-Device Responsiveness suite (56 tests)
+npm run test:viewports
 ```
-
 
 ---
 
-## 🌐 Production Deployment
+## 📱 Android Companion APK Build & Delivery
 
-SakkuPay is a lightweight Node.js application with zero heavy external database dependencies:
+### Pre-Built Verified Binary
+The latest official release APK is embedded in the repository:
+- **Download Paths:** [`downloads/sakkupay.apk`](file:///D:/SakkuPay/downloads/sakkupay.apk) and [`downloads/sakkupay-companion.apk`](file:///D:/SakkuPay/downloads/sakkupay-companion.apk)
+- **Authenticated Endpoint:** `GET /api/companion/download` (enforces merchant Bearer token)
+- **Package ID:** `in.sakkupay.companion`
+- **Application Label:** `SakkuPay Companion`
+- **File Size:** `1,788,931 bytes` (1.71 MB)
+- **SHA-256 Checksum:** `fe00ed4021e128cb333dd0e670469763b9206f86ace767d24e13f32cbc6c9169`
+- **Signing Keystore:** Signed with official certificate (`CN=SakkuPay Official, OU=Mobile Financial Security, O=SakkuPay Payments Technologies, L=Bengaluru, ST=Karnataka, C=IN`).
 
-- **Build Command:** `npm install`
-- **Start Command:** `npm start`
-- **Recommended Node Version:** `>= 20.0.0`
-- **Persistent Disk:** If deploying on containerized platforms (such as Render, Railway, Fly.io, or VPS), attach a persistent volume to preserve `data.json`.
-- **Reverse Proxy / SSL:** If running behind Nginx or Cloudflare, ensure headers `X-Forwarded-Proto: https` are passed for proper callback generation.
+### Building From Source via GitHub Actions
+Android APK builds are automated via [`.github/workflows/build-companion-apk.yml`](file:///D:/SakkuPay/.github/workflows/build-companion-apk.yml).
+Pushes to `companion-android/**` on branches `main`, `release/**`, `feat/**`, or `fix/**` trigger release assembly, SHA-256 verification, and artifact upload.
+
+### Building Locally via Gradle
+```bash
+cd companion-android
+
+# Generate release keystore (if not present)
+keytool -genkeypair -v -keystore release.keystore -alias sakkupay \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -storepass YOUR_KEYSTORE_PASSWORD -keypass YOUR_KEY_PASSWORD \
+  -dname "CN=SakkuPay Official, OU=Mobile Financial Security, O=SakkuPay Payments Technologies, L=Bengaluru, ST=Karnataka, C=IN"
+
+# Assemble Release APK
+./gradlew assembleRelease --no-daemon
+```
+The output APK is generated at:
+`companion-android/app/build/outputs/apk/release/app-release.apk`
+
+---
+
+## 🔐 Cashier Pairing Workflow (Two-Stage Protocol)
+
+To eliminate manual API key entry on mobile devices, SakkuPay utilizes a two-stage pairing protocol:
+
+```
+Merchant Dashboard                         Server Backend                     Android Companion App
+      │                                          │                                      │
+      │ 1. Click "Connect by App"                │                                      │
+      │ ────────────────────────────────────────>│                                      │
+      │    POST /api/cashier/sessions            │                                      │
+      │    (provider, phone, UPI ID)             │                                      │
+      │                                          │                                      │
+      │ 2. Displays 12-digit Server Code         │                                      │
+      │ <────────────────────────────────────────│                                      │
+      │    (e.g., 8492 1048 3920)                │                                      │
+      │                                          │  3. Enter 12-digit Server Code       │
+      │                                          │ <────────────────────────────────────│
+      │                                          │     POST /api/cashier/pair-server-code
+      │                                          │                                      │
+      │                                          │  4. Returns single-use 6-digit App Code
+      │                                          │ ────────────────────────────────────>│
+      │                                          │     (e.g., 492 810)                  │
+      │                                          │                                      │
+      │ 5. Enter 6-digit App Code in Dashboard   │                                      │
+      │ ────────────────────────────────────────>│                                      │
+      │    POST /api/cashier/verify-app-code     │                                      │
+      │                                          │                                      │
+      │ 6. Cashier Activated & Paired            │                                      │
+      │ <────────────────────────────────────────│                                      │
+```
+
+1. **Step 1 (Dashboard):** Merchant navigates to **Collect Apps** -> **Connect by App**. Selects provider (`PhonePe`, `Paytm`, `GPay`, or `Other`), enters phone number and UPI ID.
+2. **Step 2 (Server Code):** Server generates a single-use 12-digit Server Code with a 15-minute expiration and stores its SHA-256 hash in `cashier_pairing_sessions`.
+3. **Step 3 (Companion App):** Staff installs the APK, launches the app, and enters the 12-digit Server Code.
+4. **Step 4 (App Code):** Mobile app calls `POST /api/cashier/pair-server-code`. Server verifies the hash, generates a scoped companion API key (`sk_csh_...`), and returns a 6-digit App Code.
+5. **Step 5 (Activation):** Merchant inputs the 6-digit App Code into the dashboard. Server verifies against `appCodeHash` (with a 5-attempt brute-force limit) and activates the cashier.
+6. **Session Recovery:** Active pairing sessions survive browser refreshes and back navigation via `GET /api/cashier/sessions/:id`.
+
+---
+
+## ⚖ Payment Verification Mechanisms & Limitations
+
+### 1. Inbound Notification Ingestion (Android Companion)
+- **Mechanism:** `PaymentNotificationListener.kt` captures notifications from UPI merchant apps and bank credit SMS.
+- **Filtering:** Outgoing transactions and debit alerts (`debited`, `sent to`, `paid to`) are immediately rejected.
+- **Parsing:** `PaymentParser.kt` extracts credit amounts (handling commas, rupee signs, and decimals) and 6+ character UTR numbers.
+- **Forwarding:** Posts to `/api/v1/webhook/verify-payment` using the scoped cashier API key.
+
+### 2. Direct Business Account Webhooks
+- **PhonePe Business:** `POST /api/v1/webhook/phonepe` validates `X-VERIFY` signatures (`SHA256(payload + saltKey)###saltIndex`).
+- **Paytm Business:** `POST /api/v1/webhook/paytm` validates `CHECKSUMHASH` against the decrypted merchant secret.
+
+### 3. Settlement Truth & Anti-Fraud Rules
+- **No Self-Approval:** Merchants cannot manually approve transactions.
+- **Amount Matching Guard:** Amounts received in webhooks must match the expected order amount in integer paise. Mismatched amounts are flagged as `flagged_ambiguous` under review.
+- **Terminal State Lock:** Once a transaction is settled (`success`), subsequent out-of-order failure events or stale webhooks are permanently rejected.
+
+### 4. Important Verification Limitations
+- **No Direct Bank Pull APIs:** SakkuPay does **NOT** currently connect to private bank host-to-host pull APIs (e.g., ICICI Eazypay API, HDFC SmartHub pull endpoints). Verification relies strictly on inbound push notifications (Android Companion) or provider webhooks.
+- **No Background Queue Worker:** Verification occurs reactively when webhooks arrive or when an administrator executes manual force-settle with proof in the admin drawer.
+
+---
+
+## 🗄 Database Architecture: SQLite vs PostgreSQL
+
+SakkuPay provides a dual-driver database architecture:
+
+### 1. Local Development: SQLite (`node:sqlite`)
+- Uses Node.js v22+ built-in `node:sqlite` (`DatabaseSync`).
+- Enabled by default when `DATABASE_URL` is omitted.
+- Configured in Write-Ahead Logging (`WAL`) mode with foreign key cascades.
+- Synchronous prepared statements provide microsecond query latency.
+
+### 2. Production Persistence on Render
+Render Web Services run stateless Docker containers that reset their local filesystems on every redeploy. To persist data across redeployments:
+
+- **Option A: Render Persistent Disk (Immediate & Recommended)**
+  - Attach a Render Persistent Disk mounted at `/var/data`.
+  - Set `DB_PATH=/var/data/sakkupay.db`.
+  - Works 100% out-of-the-box with the current synchronous repository layer.
+- **Option B: Managed PostgreSQL (`DATABASE_URL`)**
+  - Set `DATABASE_URL` to a managed PostgreSQL database.
+  - The PostgreSQL schema ([`src/db/postgresSchema.js`](file:///D:/SakkuPay/src/db/postgresSchema.js)) provides all 5 versioned migrations.
+  - Note: While schema creation and the atomic migrator are fully implemented and tested, live server queries currently run through `src/db/repository.js`. Adapting the repository to asynchronous PostgreSQL queries is documented in [PROJECT_STATUS.md](file:///D:/SakkuPay/PROJECT_STATUS.md).
+
+### 3. Production Startup Guard
+[`server.js`](file:///D:/SakkuPay/server.js) enforces a strict boot-time check: when `NODE_ENV === 'production'`, the server throws a fatal exception and halts if neither `DATABASE_URL` nor `DB_PATH` is configured.
+
+---
+
+## 🔄 Database Migration Procedure
+
+To migrate existing SQLite data into managed PostgreSQL without data loss:
+
+### Safe Atomic Migration (`src/db/migrateSqliteToPostgres.js`)
+The migration engine runs all operations inside a single atomic PostgreSQL transaction (`BEGIN ... COMMIT`) with count parity checks:
+
+```bash
+# Execute safe atomic migration from SQLite to PostgreSQL
+node -e "
+const { getDatabase, getPostgresPool } = require('./src/db/connection');
+const { migrateSqliteToPostgres } = require('./src/db/migrateSqliteToPostgres');
+
+async function run() {
+  const sqlite = getDatabase();
+  const pool = getPostgresPool(process.env.DATABASE_URL);
+  const client = await pool.connect();
+  try {
+    const res = await migrateSqliteToPostgres(sqlite, client);
+    console.log('Parity Verification:', res.recordsTransferred);
+  } finally {
+    client.release();
+    await pool.end();
+  }
+}
+run().catch(err => { console.error('Migration failed:', err); process.exit(1); });
+"
+```
+
+### Safety Features of the Migrator:
+1. **Idempotent Schema:** Applies PostgreSQL migrations 1 to 5 (`CREATE TABLE IF NOT EXISTS` and `ADD COLUMN IF NOT EXISTS`).
+2. **Upsert Logic:** Inserts records with `ON CONFLICT DO UPDATE` to prevent key collision failures.
+3. **Count Parity Assertion:** Validates that record counts in PostgreSQL match or exceed SQLite counts.
+4. **Automatic Rollback:** If any error occurs or counts fail to match, an immediate `ROLLBACK` is issued, leaving the target database completely untouched.
+5. **Zero Destruction:** Never issues `DROP TABLE` or `DELETE FROM`.
+
+---
+
+## 🚢 Render Deployment Preparation Checklist
+
+Before deploying SakkuPay to Render, complete the following steps:
+
+- [ ] **1. Create Render PostgreSQL Instance:**
+  - Create a new PostgreSQL database on Render (`sakkupay-db`).
+  - Copy the **Internal Database URL**.
+- [ ] **2. Configure Web Service Environment Variables on Render:**
+  - `NODE_ENV`: `production`
+  - `PORT`: (Auto-injected by Render)
+  - `APP_URL`: `https://sakkupay.onrender.com`
+  - `TRUST_PROXY`: `true`
+  - `DATABASE_URL`: `postgres://...` (or attach Persistent Disk and set `DB_PATH=/var/data/sakkupay.db`)
+  - `SAKKUPAY_TOKEN_SECRET`: Random 32+ character string (`openssl rand -hex 32`)
+  - `VAULT_SECRET`: Random 32+ character string (`openssl rand -hex 32`)
+  - `ADMIN_USERNAME`: Custom administrative username
+  - `ADMIN_PASSWORD`: Strong password of 12+ characters
+  - `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET`: Configured in Google Cloud Console with authorized redirect URI `https://sakkupay.onrender.com/api/auth/google/callback`.
+- [ ] **3. Sideload & Test Companion APK:**
+  - Download [`downloads/sakkupay.apk`](file:///D:/SakkuPay/downloads/sakkupay.apk) onto an Android 13/14/15 phone.
+  - Sideload the APK and verify that the "Restricted Settings" prompt allows enabling Notification Access.
+  - Perform a two-stage cashier pairing against the staging/production URL.
+
+---
+
+## ⚙ Environment Variables Reference
+
+| Variable | Scope | Required | Default / Example | Purpose |
+|---|:---:|:---:|---|---|
+| `NODE_ENV` | All | Yes | `development` / `production` | Enforces production security checks and database persistence. |
+| `PORT` | All | Optional | `3000` | HTTP port the server binds to (injected by Render). |
+| `APP_URL` | All | Rec. | `http://localhost:3000` | Canonical base URL used for checkout payment link generation. |
+| `TRUST_PROXY` | Prod | Rec. | `false` (set `true` in prod) | Trusts `X-Forwarded-For` header from Render/Cloudflare proxies. |
+| `DB_PATH` | Local/Disk | Yes* | `./sakkupay.db` | Path to SQLite database file (*required if `DATABASE_URL` is omitted). |
+| `DATABASE_URL` | Prod | Yes* | `postgresql://user:pass@host/db` | Connection string for managed PostgreSQL (*required if `DB_PATH` is omitted). |
+| `DB_POOL_MAX` | Prod | Optional | `20` | Maximum connections for PostgreSQL pool. |
+| `SAKKUPAY_TOKEN_SECRET` | All | Yes | 32+ char random string | HMAC-SHA256 signing secret for session tokens. |
+| `VAULT_SECRET` | All | Yes | 32+ char random string | AES-256-GCM secret for encrypting gateway salt keys. |
+| `ADMIN_USERNAME` | All | Yes | `admin` | Username for accessing `/admin`. |
+| `ADMIN_PASSWORD` | All | Yes | 12+ char secure password | Password for accessing `/admin`. |
+| `ADMIN_EMAIL` | All | Optional | `admin@sakkupay.local` | Email address for SuperAdmin audit trail notifications. |
+| `GOOGLE_CLIENT_ID` | All | Yes** | `xxx.apps.googleusercontent.com` | Google OAuth 2.0 client ID (**required for Google Sign-In). |
+| `GOOGLE_CLIENT_SECRET` | All | Yes** | `GOCSPX-xxx` | Google OAuth 2.0 client secret. |
+| `GOOGLE_REDIRECT_URI` | All | Optional | `${APP_URL}/api/auth/google/callback` | Authorized redirect URI for Google OAuth. |
+| `DATA_JSON_PATH` | Dev | Optional | `./data.json` | Path for legacy fallback JSON snapshots. |
+
+---
+
+## 🛡 Security Precautions & Troubleshooting
+
+### Security Safeguards
+1. **Never Commit Secrets:** `.env` and all database files are strictly ignored in [`.gitignore`](file:///D:/SakkuPay/.gitignore). Always use `.env.example` as a template.
+2. **CWE-598 Mitigation:** Session tokens are rejected if passed in URL query strings. All sensitive endpoints mandate `Authorization: Bearer <token>`.
+3. **Audit Trail Immutability:** SQLite engine triggers prevent direct modification or deletion of admin audit logs.
+4. **Timing-Safe Checks:** Webhook signatures use `crypto.timingSafeEqual` to eliminate timing side-channel attacks.
+
+### Troubleshooting Common Issues
+- **Server Refuses to Boot in Production:**
+  Check server logs. The startup validator halts if `SAKKUPAY_TOKEN_SECRET` or `VAULT_SECRET` is shorter than 32 characters, if default passwords are detected, or if neither `DATABASE_URL` nor persistent `DB_PATH` is set.
+- **Android "Restricted Setting" Error:**
+  On Android 13+, sideloaded applications cannot enable Notification Listener access directly. Go to: **Settings -> Apps -> SakkuPay Companion -> Tap the 3 dots in the top-right -> Allow restricted settings**, then grant notification access.
+- **Cashier Pairing Rejection:**
+  Server Codes expire after 15 minutes. If a code expires, click **Initiate Pairing** again in the dashboard to generate a new 12-digit code.
