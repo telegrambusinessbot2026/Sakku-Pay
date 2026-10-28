@@ -97,7 +97,8 @@ async function runTests() {
 
       const arrayBuf = await res.arrayBuffer();
       const buf = Buffer.from(arrayBuf);
-      assert.strictEqual(buf.length, 1734515, 'Buffer size must match exact APK size');
+      const apkDiskSize = fs.statSync(path.join(__dirname, 'downloads', 'sakkupay.apk')).size;
+      assert.strictEqual(buf.length, apkDiskSize, 'Buffer size must match exact APK size');
       assert.strictEqual(buf.slice(0, 4).toString('utf8'), 'PK\x03\x04', 'Buffer starts with APK/Zip header PK\\x03\\x04');
       pass('GET /api/companion/download with valid merchant token serves binary APK with attachment filename sakkupay.apk');
     }
@@ -124,7 +125,8 @@ async function runTests() {
       });
       assert.strictEqual(res.status, 200, 'Authenticated HEAD request must return HTTP 200');
       assert.strictEqual(res.headers.get('content-type'), 'application/vnd.android.package-archive');
-      assert.strictEqual(res.headers.get('content-length'), '1734515');
+      const apkDiskSize = fs.statSync(path.join(__dirname, 'downloads', 'sakkupay.apk')).size;
+      assert.strictEqual(res.headers.get('content-length'), String(apkDiskSize));
       assert(res.headers.get('content-disposition').includes('sakkupay.apk'));
       const text = await res.text();
       assert.strictEqual(text, '', 'HEAD response body must be empty');
