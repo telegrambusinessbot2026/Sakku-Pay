@@ -219,6 +219,11 @@ function go(page, pushHistory = true) {
   if (page === 'links') renderLinks();
   if (page === 'upi') renderUpis();
   if (page === 'support') loadSupportQueries();
+  if (page === 'companion') {
+    loadCashiers();
+    loadCashierLogs();
+    checkActivePairingSession();
+  }
 
   $('.sidebar')?.classList.remove('open');
   $('#sidebar-backdrop')?.classList.remove('active');
@@ -1569,6 +1574,467 @@ function logout(reason = 'session_expired') {
   if (sseSource) { try { sseSource.close(); } catch {} sseSource = null; }
   window.location.replace('/login?' + encodeURIComponent(reason) + '=1');
 }
+
+/* ─── Cashier Settings & Two-Stage App Pairing (Phase 6) ─────────────────── */
+let cashierPairingTimer = null;
+let cashierPollTimer = null;
+let activePairingSession = null;
+
+function getProviderBadge(provider) {
+  const p = String(provider || '').toLowerCase();
+  if (p === 'phonepe') {
+    return `<span class="pill" style="background:rgba(103,57,183,0.18);color:#A78BFA;border:1px solid rgba(103,57,183,0.35);font-size:11px;font-weight:600">
+      <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#A78BFA;margin-right:4px"></span>PhonePe Business
+    </span>`;
+  }
+  if (p === 'paytm') {
+    return `<span class="pill" style="background:rgba(0,186,242,0.15);color:#38BDF8;border:1px solid rgba(0,186,242,0.3);font-size:11px;font-weight:600">
+      <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#38BDF8;margin-right:4px"></span>Paytm Business
+    </span>`;
+  }
+  if (p === 'gpay') {
+    return `<span class="pill" style="background:rgba(26,115,232,0.15);color:#60A5FA;border:1px solid rgba(26,115,232,0.3);font-size:11px;font-weight:600">
+      <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#60A5FA;margin-right:4px"></span>Google Pay
+    </span>`;
+  }
+  return `<span class="pill" style="background:rgba(99,102,241,0.15);color:#818CF8;border:1px solid rgba(99,102,241,0.3);font-size:11px;font-weight:600">
+    <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#818CF8;margin-right:4px"></span>Other UPI
+  </span>`;
+}
+
+function getStatusBadge(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'active') {
+    return `<span class="pill success" style="font-size:11px;font-weight:600"><span class="dot"></span>Active</span>`;
+  }
+  if (s === 'pending_pairing') {
+    return `<span class="pill" style="background:rgba(251,146,60,0.15);color:#FB923C;border:1px solid rgba(251,146,60,0.3);font-size:11px;font-weight:600">⏳ Pending Pairing</span>`;
+  }
+  return `<span class="pill" style="background:rgba(255,255,255,0.06);color:var(--muted);border:1px solid rgba(255,255,255,0.1);font-size:11px;font-weight:600">Revoked</span>`;
+}
+
+async function loadCashiers() {
+  const tbody = $('#cashier-table-body');
+  const countBadge = $('#cashier-count-badge');
+  if (!tbody) return;
+
+  try {
+    const data = await api('/cashier/list');
+    const cashiers = Array.isArray(data?.cashiers) ? data.cashiers : [];
+    const activeCount = cashiers.filter(c => c.status === 'active').length;
+    if (countBadge) countBadge.textContent = `${activeCount} Active`;
+
+    if (cashiers.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" style="text-align:center;padding:36px 20px;color:var(--muted)">
+            <div style="font-size:24px;margin-bottom:8px">📱</div>
+            <strong style="color:#FFFFFF;display:block;margin-bottom:4px;font-size:14px">No Cashier Apps Connected Yet</strong>
+            <p style="font-size:12.5px;margin:0 0 14px;color:var(--muted)">Link your merchant Android phone to auto-verify PhonePe, Paytm, or Google Pay alerts.</p>
+            <button class="primary btn-sm" onclick="openCashierModal()">+ Connect by App</button>
+          </td>
+        </tr>`;
+      return;
+    }
+
+    tbody.innerHTML = cashiers.map(c => `
+      <tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:32px;height:32px;border-radius:8px;background:rgba(99,102,241,0.15);display:grid;place-items:center;color:#818CF8;font-size:14px">📱</div>
+            <div>
+              <strong style="color:#FFFFFF;font-size:13px;display:block">${escapeHtml(c.name || 'Store Cashier')}</strong>
+              <small style="color:var(--muted);font-family:monospace;font-size:11px">${c.id}</small>
+            </div>
+          </div>
+        </td>
+        <td>${getProviderBadge(c.provider)}</td>
+        <td><span style="font-family:monospace;font-size:12.5px;color:#CBD5E1">${escapeHtml(c.phoneNumber || '—')}</span></td>
+        <td><code style="color:#A5B4FC;background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:4px;font-size:12px">${escapeHtml(c.upiId || '—')}</code></td>
+        <td>${getStatusBadge(c.status)}</td>
+        <td>
+          <span style="font-size:12px;color:#CBD5E1">${c.lastSeenAt ? time(c.lastSeenAt) : (c.pairedAt ? time(c.pairedAt) : 'Never')}</span>
+        </td>
+        <td>
+          ${c.status !== 'revoked' ? `
+            <button class="btn btn-outline btn-sm" style="color:#F87171;border-color:rgba(239,68,68,0.3)" onclick="revokeCashier('${c.id}', '${escapeHtml(c.name || 'Cashier')}')" title="Revoke Cashier Access">
+              Revoke
+            </button>
+          ` : `
+            <span style="font-size:11px;color:var(--muted)">Inactive</span>
+          `}
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    console.error('Error loading cashiers:', err);
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:#F87171">Failed to load cashiers: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+async function loadCashierLogs() {
+  const tbody = $('#cashier-logs-table-body');
+  if (!tbody) return;
+
+  try {
+    const data = await api('/cashier/logs');
+    const logs = Array.isArray(data?.logs) ? data.logs : [];
+
+    if (logs.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--muted);font-size:12.5px">No audit log entries yet.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = logs.map(l => `
+      <tr>
+        <td style="font-size:12px;color:var(--muted);white-space:nowrap">${time(l.createdAt)}</td>
+        <td><strong style="color:#FFFFFF;font-size:12.5px">${escapeHtml(l.cashierName || l.cashierId || 'System')}</strong></td>
+        <td>
+          <span class="pill" style="background:rgba(255,255,255,0.06);color:#A5B4FC;font-size:11px;font-family:monospace">${escapeHtml(l.event)}</span>
+        </td>
+        <td style="font-size:12.5px;color:#CBD5E1">${escapeHtml(l.details || '—')}</td>
+        <td style="font-size:11.5px;color:var(--muted);font-family:monospace">${escapeHtml(l.ipAddress || '—')}</td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    console.error('Error loading cashier logs:', err);
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;color:#F87171">Failed to load audit logs.</td></tr>`;
+  }
+}
+
+function openCashierModal(resume = false) {
+  if (resume && activePairingSession) {
+    resumeActiveCashierSession();
+    return;
+  }
+  switchCashierStep(1);
+  const errBox = $('#cashier-step-1-error');
+  if (errBox) errBox.style.display = 'none';
+
+  if (upis && upis.length > 0 && !$('#cashier-upi-input')?.value) {
+    const defaultUpi = upis.find(u => u.isDefault) || upis[0];
+    if (defaultUpi) {
+      if ($('#cashier-upi-input')) $('#cashier-upi-input').value = defaultUpi.upiId || '';
+      if ($('#cashier-phone-input')) $('#cashier-phone-input').value = defaultUpi.phoneNumber || '';
+    }
+  }
+
+  modal('cashier-connect-modal', true);
+}
+
+function closeCashierModal() {
+  if (cashierPollTimer) {
+    clearInterval(cashierPollTimer);
+    cashierPollTimer = null;
+  }
+  modal('cashier-connect-modal', false);
+}
+
+function switchCashierStep(step) {
+  const steps = [1, 2, 3, 'success'];
+  steps.forEach(s => {
+    const el = $('#cashier-step-' + s);
+    if (el) el.style.display = s === step ? 'block' : 'none';
+  });
+
+  const progressBar = $('#cashier-step-progress-bar');
+  if (progressBar) {
+    if (step === 1) progressBar.style.width = '0%';
+    else if (step === 2) progressBar.style.width = '50%';
+    else if (step === 3 || step === 'success') progressBar.style.width = '100%';
+  }
+
+  [1, 2, 3].forEach(num => {
+    const circle = $('#step-circle-' + num);
+    const text = $('#step-text-' + num);
+    if (!circle || !text) return;
+
+    if (step === num || (step === 'success' && num === 3)) {
+      circle.style.background = '#6366F1';
+      circle.style.color = '#FFFFFF';
+      circle.style.border = '2px solid #818CF8';
+      circle.textContent = String(num);
+      text.style.color = '#FFFFFF';
+    } else if (step > num) {
+      circle.style.background = '#10B981';
+      circle.style.color = '#FFFFFF';
+      circle.style.border = '2px solid #34D399';
+      circle.textContent = '✓';
+      text.style.color = '#34D399';
+    } else {
+      circle.style.background = '#1E293B';
+      circle.style.color = '#94A3B8';
+      circle.style.border = '2px solid rgba(255,255,255,0.15)';
+      circle.textContent = String(num);
+      text.style.color = '#94A3B8';
+    }
+  });
+
+  if (step === 3) {
+    const input = $('#cashier-app-code-input');
+    if (input) setTimeout(() => input.focus(), 100);
+  }
+}
+
+async function submitCashierSession(e) {
+  if (e) e.preventDefault();
+  const btn = $('#btn-generate-server-code');
+  const errBox = $('#cashier-step-1-error');
+  if (errBox) errBox.style.display = 'none';
+
+  const providerEl = document.querySelector('input[name="cashier_provider"]:checked');
+  const provider = providerEl ? providerEl.value : 'phonepe';
+  const name = ($('#cashier-name-input')?.value || '').trim();
+  const phoneNumber = ($('#cashier-phone-input')?.value || '').replace(/[^0-9]/g, '');
+  const upiId = ($('#cashier-upi-input')?.value || '').trim();
+
+  if (!phoneNumber || phoneNumber.length !== 10) {
+    if (errBox) {
+      errBox.textContent = 'Please enter a valid 10-digit mobile number.';
+      errBox.style.display = 'block';
+    }
+    return;
+  }
+  if (!upiId || !upiId.includes('@')) {
+    if (errBox) {
+      errBox.textContent = 'Please enter a valid UPI ID (e.g. store@ybl).';
+      errBox.style.display = 'block';
+    }
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating Server Code…'; }
+
+  try {
+    const res = await api('/cashier/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ provider, name, phoneNumber, upiId })
+    });
+
+    if (!res || !res.ok) throw new Error(res?.error || 'Failed to initiate pairing session.');
+
+    activePairingSession = {
+      sessionId: res.sessionId,
+      cashierId: res.cashierId,
+      serverCode: res.serverCode,
+      rawServerCode: res.rawServerCode,
+      expiresAt: res.expiresAt,
+      name,
+      provider,
+      phoneNumber,
+      upiId
+    };
+    sessionStorage.setItem('sakkupay_active_pairing_session', JSON.stringify(activePairingSession));
+
+    if ($('#cashier-display-server-code')) $('#cashier-display-server-code').textContent = res.serverCode;
+    if ($('#cashier-tutorial-server-url')) $('#cashier-tutorial-server-url').textContent = window.location.origin;
+
+    startCountdownTimer(res.expiresAt);
+    startCashierPolling(res.sessionId);
+    switchCashierStep(2);
+    checkActivePairingSession();
+  } catch (err) {
+    console.error('Session initiation error:', err);
+    if (errBox) {
+      errBox.textContent = err.message || 'Error initiating pairing session.';
+      errBox.style.display = 'block';
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Generate Server Code →'; }
+  }
+}
+
+function startCountdownTimer(expiresAt) {
+  if (cashierPairingTimer) clearInterval(cashierPairingTimer);
+  const timerPill = $('#cashier-expiry-timer');
+  const expiryTime = new Date(expiresAt).getTime();
+
+  function update() {
+    const diff = Math.max(0, expiryTime - Date.now());
+    const mins = Math.floor(diff / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+    if (timerPill) {
+      timerPill.textContent = `⏳ Expires in ${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    if (diff <= 0) {
+      clearInterval(cashierPairingTimer);
+      if (timerPill) timerPill.textContent = '❌ Code Expired';
+      if (cashierPollTimer) clearInterval(cashierPollTimer);
+    }
+  }
+  update();
+  cashierPairingTimer = setInterval(update, 1000);
+}
+
+function startCashierPolling(sessionId) {
+  if (cashierPollTimer) clearInterval(cashierPollTimer);
+
+  cashierPollTimer = setInterval(async () => {
+    try {
+      const data = await api('/cashier/sessions/' + sessionId);
+      if (!data || !data.ok) return;
+
+      if (data.status === 'app_code_generated' || data.hasAppCode) {
+        const pollTitle = $('#cashier-poll-title');
+        const pollSub = $('#cashier-poll-sub');
+        const spinner = $('#cashier-poll-spinner');
+        if (pollTitle) pollTitle.innerHTML = '✓ Companion App Connected!';
+        if (pollSub) pollSub.innerHTML = 'App Code is displayed on your phone screen. Click below to verify.';
+        if (spinner) {
+          spinner.style.border = 'none';
+          spinner.style.animation = 'none';
+          spinner.innerHTML = '✓';
+          spinner.style.color = '#34D399';
+          spinner.style.fontSize = '16px';
+        }
+      } else if (data.status === 'completed') {
+        clearInterval(cashierPollTimer);
+        sessionStorage.removeItem('sakkupay_active_pairing_session');
+        activePairingSession = null;
+        switchCashierStep('success');
+        checkActivePairingSession();
+      }
+    } catch {
+      // Ignore polling errors
+    }
+  }, 3000);
+}
+
+function copyServerCode() {
+  const code = activePairingSession?.serverCode || $('#cashier-display-server-code')?.textContent || '';
+  if (!code) return;
+  navigator.clipboard.writeText(code).then(() => {
+    toast('📋 12-digit Server Code copied to clipboard!');
+  }).catch(() => {
+    toast('Copied: ' + code);
+  });
+}
+
+async function submitVerifyAppCode(e) {
+  if (e) e.preventDefault();
+  const btn = $('#btn-verify-app-code');
+  const errBox = $('#cashier-verify-error');
+  if (errBox) errBox.style.display = 'none';
+
+  const rawCode = ($('#cashier-app-code-input')?.value || '').replace(/[^0-9]/g, '');
+  if (rawCode.length !== 6) {
+    if (errBox) {
+      errBox.textContent = 'Please enter the exact 6-digit App Code.';
+      errBox.style.display = 'block';
+    }
+    return;
+  }
+
+  const sessionId = activePairingSession?.sessionId;
+  if (!sessionId) {
+    if (errBox) {
+      errBox.textContent = 'Pairing session lost. Please restart connection.';
+      errBox.style.display = 'block';
+    }
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Verifying App Code…'; }
+
+  try {
+    const res = await api('/cashier/verify-app-code', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId, appCode: rawCode })
+    });
+
+    if (!res || !res.ok) throw new Error(res?.error || 'Verification failed.');
+
+    if (cashierPollTimer) clearInterval(cashierPollTimer);
+    if (cashierPairingTimer) clearInterval(cashierPairingTimer);
+    sessionStorage.removeItem('sakkupay_active_pairing_session');
+    activePairingSession = null;
+
+    if ($('#cashier-success-msg')) {
+      $('#cashier-success-msg').textContent = `Cashier "${res.cashier?.name || 'Device'}" is successfully paired and activated for real-time UPI verification.`;
+    }
+
+    switchCashierStep('success');
+    checkActivePairingSession();
+    toast('🎉 Cashier paired and activated successfully!');
+    await loadCashiers();
+    await loadCashierLogs();
+  } catch (err) {
+    console.error('App code verification error:', err);
+    if (errBox) {
+      errBox.textContent = err.message || 'Invalid App Code.';
+      errBox.style.display = 'block';
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Verify & Activate Cashier ✓'; }
+  }
+}
+
+async function revokeCashier(cashierId, cashierName) {
+  if (!confirm(`Are you sure you want to revoke cashier "${cashierName}"? This device will immediately stop reporting verification events.`)) {
+    return;
+  }
+
+  try {
+    const res = await api('/cashier/' + cashierId, { method: 'DELETE' });
+    if (!res || !res.ok) throw new Error(res?.error || 'Failed to revoke cashier');
+    toast(`Cashier "${cashierName}" revoked successfully.`);
+    await loadCashiers();
+    await loadCashierLogs();
+  } catch (err) {
+    console.error('Revocation error:', err);
+    toast('Error revoking cashier: ' + (err.message || 'Unknown error'), true);
+  }
+}
+
+function checkActivePairingSession() {
+  const banner = $('#cashier-session-resume-banner');
+  const bannerText = $('#cashier-session-resume-text');
+  const raw = sessionStorage.getItem('sakkupay_active_pairing_session');
+
+  if (!raw) {
+    if (banner) banner.style.display = 'none';
+    activePairingSession = null;
+    return;
+  }
+
+  try {
+    const session = JSON.parse(raw);
+    const expiresAt = new Date(session.expiresAt).getTime();
+    if (Date.now() > expiresAt) {
+      sessionStorage.removeItem('sakkupay_active_pairing_session');
+      if (banner) banner.style.display = 'none';
+      activePairingSession = null;
+      return;
+    }
+
+    activePairingSession = session;
+    if (banner && bannerText) {
+      bannerText.textContent = `Pairing in progress for "${session.name || 'Cashier'}" (${session.provider ? session.provider.toUpperCase() : 'UPI'} · Server Code: ${session.serverCode || '—'}).`;
+      banner.style.display = 'block';
+    }
+  } catch {
+    sessionStorage.removeItem('sakkupay_active_pairing_session');
+    if (banner) banner.style.display = 'none';
+  }
+}
+
+function resumeActiveCashierSession() {
+  if (!activePairingSession) return;
+  if ($('#cashier-display-server-code')) $('#cashier-display-server-code').textContent = activePairingSession.serverCode;
+  if ($('#cashier-tutorial-server-url')) $('#cashier-tutorial-server-url').textContent = window.location.origin;
+
+  startCountdownTimer(activePairingSession.expiresAt);
+  startCashierPolling(activePairingSession.sessionId);
+  switchCashierStep(2);
+  modal('cashier-connect-modal', true);
+}
+
+function dismissActiveCashierSession() {
+  sessionStorage.removeItem('sakkupay_active_pairing_session');
+  activePairingSession = null;
+  checkActivePairingSession();
+}
+
 
 /* ─── Boot ─────────────────────────────────────────────────────────────────── */
 async function boot() {

@@ -193,6 +193,55 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_action ON admin_audit_trail(action);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_target ON admin_audit_trail(targetType, targetId);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_actor ON admin_audit_trail(actorId);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_trail(createdAt);
+
+-- 13. Cashiers Table (Milestone 8)
+CREATE TABLE IF NOT EXISTS cashiers (
+  id TEXT PRIMARY KEY,
+  merchantId TEXT NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  provider TEXT NOT NULL CHECK(provider IN ('phonepe', 'paytm', 'gpay', 'other')),
+  phoneNumber TEXT NOT NULL,
+  upiId TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending_pairing' CHECK(status IN ('pending_pairing', 'paired', 'active', 'revoked')),
+  pairedAt TEXT,
+  lastSeenAt TEXT,
+  createdAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cashiers_merchant ON cashiers(merchantId);
+CREATE INDEX IF NOT EXISTS idx_cashiers_status ON cashiers(status);
+CREATE INDEX IF NOT EXISTS idx_cashiers_provider ON cashiers(provider);
+
+-- 14. Cashier Pairing Sessions Table (Milestone 8)
+CREATE TABLE IF NOT EXISTS cashier_pairing_sessions (
+  id TEXT PRIMARY KEY,
+  merchantId TEXT NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+  cashierId TEXT NOT NULL REFERENCES cashiers(id) ON DELETE CASCADE,
+  serverCodeHash TEXT NOT NULL,
+  appCodeHash TEXT,
+  status TEXT NOT NULL DEFAULT 'pending_server_code' CHECK(status IN ('pending_server_code', 'server_code_verified', 'app_code_generated', 'completed', 'expired', 'revoked')),
+  attempts INTEGER DEFAULT 0,
+  expiresAt TEXT NOT NULL,
+  completedAt TEXT,
+  createdAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pairing_merchant ON cashier_pairing_sessions(merchantId);
+CREATE INDEX IF NOT EXISTS idx_pairing_server_code_hash ON cashier_pairing_sessions(serverCodeHash);
+CREATE INDEX IF NOT EXISTS idx_pairing_app_code_hash ON cashier_pairing_sessions(appCodeHash);
+CREATE INDEX IF NOT EXISTS idx_pairing_status ON cashier_pairing_sessions(status);
+
+-- 15. Cashier Audit Logs Table (Milestone 8)
+CREATE TABLE IF NOT EXISTS cashier_logs (
+  id TEXT PRIMARY KEY,
+  merchantId TEXT NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+  cashierId TEXT REFERENCES cashiers(id) ON DELETE SET NULL,
+  event TEXT NOT NULL,
+  details TEXT,
+  ipAddress TEXT,
+  createdAt TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cashier_logs_merchant ON cashier_logs(merchantId);
+CREATE INDEX IF NOT EXISTS idx_cashier_logs_cashier ON cashier_logs(cashierId);
+CREATE INDEX IF NOT EXISTS idx_cashier_logs_created ON cashier_logs(createdAt);
 `;
 
 function applyMigrations(db) {
@@ -319,6 +368,69 @@ function applyMigrations(db) {
     db.prepare(`
       INSERT INTO schema_migrations (version, applied_at, name)
       VALUES (4, ?, 'milestone7_link_templates_and_support_queries')
+    `).run(new Date().toISOString());
+  }
+
+  // Migration Version 5: Cashier App, Pairing Sessions & Cashier Logs
+  const v5 = db.prepare('SELECT version FROM schema_migrations WHERE version = 5').get();
+  if (!v5) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS cashiers (
+        id TEXT PRIMARY KEY,
+        merchantId TEXT NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        provider TEXT NOT NULL CHECK(provider IN ('phonepe', 'paytm', 'gpay', 'other')),
+        phoneNumber TEXT NOT NULL,
+        upiId TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending_pairing' CHECK(status IN ('pending_pairing', 'paired', 'active', 'revoked')),
+        pairedAt TEXT,
+        lastSeenAt TEXT,
+        createdAt TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_cashiers_merchant ON cashiers(merchantId);
+      CREATE INDEX IF NOT EXISTS idx_cashiers_status ON cashiers(status);
+      CREATE INDEX IF NOT EXISTS idx_cashiers_provider ON cashiers(provider);
+
+      CREATE TABLE IF NOT EXISTS cashier_pairing_sessions (
+        id TEXT PRIMARY KEY,
+        merchantId TEXT NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+        cashierId TEXT NOT NULL REFERENCES cashiers(id) ON DELETE CASCADE,
+        serverCodeHash TEXT NOT NULL,
+        appCodeHash TEXT,
+        status TEXT NOT NULL DEFAULT 'pending_server_code' CHECK(status IN ('pending_server_code', 'server_code_verified', 'app_code_generated', 'completed', 'expired', 'revoked')),
+        attempts INTEGER DEFAULT 0,
+        expiresAt TEXT NOT NULL,
+        completedAt TEXT,
+        createdAt TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_pairing_merchant ON cashier_pairing_sessions(merchantId);
+      CREATE INDEX IF NOT EXISTS idx_pairing_server_code_hash ON cashier_pairing_sessions(serverCodeHash);
+      CREATE INDEX IF NOT EXISTS idx_pairing_app_code_hash ON cashier_pairing_sessions(appCodeHash);
+      CREATE INDEX IF NOT EXISTS idx_pairing_status ON cashier_pairing_sessions(status);
+
+      CREATE TABLE IF NOT EXISTS cashier_logs (
+        id TEXT PRIMARY KEY,
+        merchantId TEXT NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+        cashierId TEXT REFERENCES cashiers(id) ON DELETE SET NULL,
+        event TEXT NOT NULL,
+        details TEXT,
+        ipAddress TEXT,
+        createdAt TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_cashier_logs_merchant ON cashier_logs(merchantId);
+      CREATE INDEX IF NOT EXISTS idx_cashier_logs_cashier ON cashier_logs(cashierId);
+      CREATE INDEX IF NOT EXISTS idx_cashier_logs_created ON cashier_logs(createdAt);
+    `);
+
+    const txnCols = db.prepare('PRAGMA table_info(transactions);').all().map(c => c.name);
+    if (!txnCols.includes('cashierId')) {
+      db.exec("ALTER TABLE transactions ADD COLUMN cashierId TEXT REFERENCES cashiers(id) ON DELETE SET NULL;");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_transactions_cashier ON transactions(cashierId);");
+    }
+
+    db.prepare(`
+      INSERT INTO schema_migrations (version, applied_at, name)
+      VALUES (5, ?, 'milestone8_cashier_pairing_and_logs')
     `).run(new Date().toISOString());
   }
 }

@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">SakkuPay</string>
+    <string name="app_name">SakkuPay Companion</string>
     <string name="notification_listener_label">SakkuPay Payment Verifier</string>
     <string name="notification_listener_description">SakkuPay requires notification access to detect incoming UPI payment alerts and bank SMS for your merchant account.</string>
+    <string name="pair_cashier_title">Pair Cashier</string>
+    <string name="enter_server_code">Enter 12-digit Server Code</string>
+    <string name="check_code_btn">Check &amp; Connect</string>
+    <string name="app_code_label">Your 6-Digit App Code</string>
 </resources>

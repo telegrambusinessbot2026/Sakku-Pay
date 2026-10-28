@@ -1686,6 +1686,330 @@ async function route(req, res) {
     }
   }
 
+  /* ── Cashier Pairing & Management Endpoints (Milestone 8) ── */
+  if (p === '/api/cashier/sessions') {
+    if (method === 'POST') {
+      const m = auth(req);
+      if (!m) return json(res, 401, { error: 'Authentication required' });
+
+      const rl = checkRateLimit(clientIp, 'cashier_create_session', 30, 60 * 60 * 1000);
+      if (!rl.allowed) {
+        return json(res, 429, { error: 'Too many cashier pairing sessions initiated. Please wait before retrying.' });
+      }
+
+      const b = await read(req);
+      const provider = String(b.provider || 'phonepe').toLowerCase().trim();
+      if (!['phonepe', 'paytm', 'gpay', 'other'].includes(provider)) {
+        return json(res, 400, { error: 'Provider must be "phonepe", "paytm", "gpay", or "other"' });
+      }
+
+      const phoneNumber = String(b.phoneNumber || '').trim().replace(/[^0-9]/g, '');
+      if (phoneNumber.length !== 10) {
+        return json(res, 400, { error: 'Valid 10-digit mobile number required' });
+      }
+
+      const upiId = String(b.upiId || '').trim().toLowerCase();
+      if (!upiId || !upiId.includes('@')) {
+        return json(res, 400, { error: 'Valid UPI ID (e.g. name@bank) is required' });
+      }
+
+      const name = String(b.name || (m.businessName ? `${m.businessName} Cashier` : 'Store Cashier')).trim().slice(0, 50);
+
+      // Create Cashier record
+      const cashierId = 'csh_' + crypto.randomBytes(8).toString('hex');
+      const cashier = repository.cashiers.create({
+        id: cashierId,
+        merchantId: m.id,
+        name,
+        provider,
+        phoneNumber,
+        upiId,
+        status: 'pending_pairing',
+        createdAt: new Date().toISOString()
+      });
+
+      // Generate cryptographically secure single-use 12-digit Server Code
+      const rawDigits = Array.from(crypto.randomBytes(12)).map(byte => byte % 10).join('');
+      const nonZeroLeading = (rawDigits[0] === '0' ? String(crypto.randomInt(1, 10)) : rawDigits[0]) + rawDigits.slice(1);
+      const serverCode = nonZeroLeading.replace(/(\d{4})(\d{4})(\d{4})/, '$1 $2 $3');
+      const serverCodeHash = crypto.createHash('sha256').update(nonZeroLeading).digest('hex');
+
+      const sessionId = 'cps_' + crypto.randomBytes(8).toString('hex');
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 minutes
+
+      const session = repository.cashierPairingSessions.create({
+        id: sessionId,
+        merchantId: m.id,
+        cashierId: cashier.id,
+        serverCodeHash,
+        status: 'pending_server_code',
+        expiresAt,
+        createdAt: new Date().toISOString()
+      });
+
+      repository.cashierLogs.create({
+        id: 'clg_' + crypto.randomBytes(8).toString('hex'),
+        merchantId: m.id,
+        cashierId: cashier.id,
+        event: 'pairing_session_created',
+        details: `Initiated pairing for cashier "${name}" (${provider.toUpperCase()} · ${upiId})`,
+        ipAddress: clientIp,
+        createdAt: new Date().toISOString()
+      });
+
+      return json(res, 201, {
+        ok: true,
+        sessionId: session.id,
+        cashierId: cashier.id,
+        serverCode,
+        rawServerCode: nonZeroLeading,
+        expiresAt,
+        cashier
+      });
+    }
+
+    if (method === 'GET') {
+      const m = auth(req);
+      if (!m) return json(res, 401, { error: 'Authentication required' });
+
+      const activeSessions = repository.cashierPairingSessions.findActiveByMerchant(m.id);
+      return json(res, 200, { ok: true, sessions: activeSessions });
+    }
+
+    return json(res, 405, { error: 'Method not allowed' });
+  }
+
+  if (p.startsWith('/api/cashier/sessions/')) {
+    const sessionId = p.split('/')[4];
+    if (!sessionId) return json(res, 400, { error: 'Session ID required' });
+
+    if (method === 'GET') {
+      const m = auth(req);
+      if (!m) return json(res, 401, { error: 'Authentication required' });
+
+      const session = repository.cashierPairingSessions.findById(sessionId);
+      if (!session || session.merchantId !== m.id) {
+        return json(res, 404, { error: 'Pairing session not found' });
+      }
+
+      if (session.status !== 'completed' && session.status !== 'expired' && session.status !== 'revoked') {
+        if (new Date(session.expiresAt) < new Date()) {
+          repository.cashierPairingSessions.update(session.id, { status: 'expired' });
+          session.status = 'expired';
+        }
+      }
+
+      const cashier = repository.cashiers.findById(session.cashierId);
+      return json(res, 200, {
+        ok: true,
+        sessionId: session.id,
+        status: session.status,
+        expiresAt: session.expiresAt,
+        hasAppCode: Boolean(session.appCodeHash),
+        cashier
+      });
+    }
+
+    return json(res, 405, { error: 'Method not allowed' });
+  }
+
+  // Companion App verifies 12-digit Server Code
+  if (p === '/api/cashier/pair-server-code' && method === 'POST') {
+    const rl = checkRateLimit(clientIp, 'cashier_pair_server_code', 15, 10 * 60 * 1000);
+    if (!rl.allowed) {
+      return json(res, 429, { error: 'Too many pairing verification attempts. Please wait 10 minutes before retrying.' });
+    }
+
+    const b = await read(req);
+    const rawCode = String(b.serverCode || '').replace(/[^0-9]/g, '');
+    if (rawCode.length !== 12) {
+      return json(res, 400, { error: 'Server Code must be exactly 12 digits.' });
+    }
+
+    const codeHash = crypto.createHash('sha256').update(rawCode).digest('hex');
+    const session = repository.cashierPairingSessions.findByServerCodeHash(codeHash);
+
+    if (!session) {
+      return json(res, 400, { error: 'Invalid Server Code. Please check the code in your dashboard and try again.' });
+    }
+
+    if (new Date(session.expiresAt) < new Date()) {
+      repository.cashierPairingSessions.update(session.id, { status: 'expired' });
+      return json(res, 400, { error: 'Server Code has expired (15-minute validity). Please generate a new code in your dashboard.' });
+    }
+
+    if (session.status !== 'pending_server_code' && session.status !== 'app_code_generated') {
+      return json(res, 400, { error: 'Server Code has already been used or revoked.' });
+    }
+
+    const cashier = repository.cashiers.findById(session.cashierId);
+    const merchant = repository.merchants.findById(session.merchantId);
+    if (!cashier || !merchant) {
+      return json(res, 404, { error: 'Associated merchant or cashier record not found.' });
+    }
+
+    // Generate single-use 6-digit App Code
+    const appCodeDigits = String(crypto.randomInt(100000, 1000000));
+    const appCodeHash = crypto.createHash('sha256').update(appCodeDigits).digest('hex');
+
+    // Create a scoped companion cashier API key
+    const rawApiKey = 'sk_csh_' + crypto.randomBytes(24).toString('hex');
+    const keyHash = crypto.createHash('sha256').update(rawApiKey).digest('hex');
+    repository.apiKeys.create({
+      id: 'key_' + crypto.randomBytes(8).toString('hex'),
+      merchantId: merchant.id,
+      name: `Companion Cashier (${cashier.name})`,
+      prefix: rawApiKey.slice(0, 10),
+      hash: keyHash,
+      createdAt: new Date().toISOString()
+    });
+
+    repository.cashierPairingSessions.update(session.id, {
+      appCodeHash,
+      status: 'app_code_generated'
+    });
+
+    repository.cashiers.update(cashier.id, {
+      lastSeenAt: new Date().toISOString()
+    });
+
+    repository.cashierLogs.create({
+      id: 'clg_' + crypto.randomBytes(8).toString('hex'),
+      merchantId: merchant.id,
+      cashierId: cashier.id,
+      event: 'server_code_verified',
+      details: `Companion app verified Server Code. Device: ${String(b.deviceModel || 'Unknown Android Device').slice(0, 50)}`,
+      ipAddress: clientIp,
+      createdAt: new Date().toISOString()
+    });
+
+    return json(res, 200, {
+      ok: true,
+      sessionId: session.id,
+      appCode: appCodeDigits,
+      merchantId: merchant.id,
+      merchantName: merchant.businessName,
+      cashierId: cashier.id,
+      provider: cashier.provider,
+      cashierApiKey: rawApiKey,
+      expiresAt: session.expiresAt
+    });
+  }
+
+  // Merchant verifies 6-digit App Code in Dashboard
+  if (p === '/api/cashier/verify-app-code' && method === 'POST') {
+    const m = auth(req);
+    if (!m) return json(res, 401, { error: 'Authentication required' });
+
+    const b = await read(req);
+    const sessionId = String(b.sessionId || '').trim();
+    const rawAppCode = String(b.appCode || '').replace(/[^0-9]/g, '');
+
+    if (!sessionId) {
+      return json(res, 400, { error: 'Session ID is required.' });
+    }
+    if (rawAppCode.length !== 6) {
+      return json(res, 400, { error: 'App Code must be exactly 6 digits.' });
+    }
+
+    const session = repository.cashierPairingSessions.findById(sessionId);
+    if (!session || session.merchantId !== m.id) {
+      return json(res, 404, { error: 'Pairing session not found.' });
+    }
+
+    if (new Date(session.expiresAt) < new Date()) {
+      repository.cashierPairingSessions.update(session.id, { status: 'expired' });
+      return json(res, 400, { error: 'Pairing session has expired. Please initiate connection again.' });
+    }
+
+    if (session.status !== 'app_code_generated') {
+      return json(res, 400, { error: 'App Code is not yet generated or has already been used.' });
+    }
+
+    const codeHash = crypto.createHash('sha256').update(rawAppCode).digest('hex');
+    if (codeHash !== session.appCodeHash) {
+      const attempts = (session.attempts || 0) + 1;
+      if (attempts >= 5) {
+        repository.cashierPairingSessions.update(session.id, { attempts, status: 'revoked' });
+        return json(res, 400, { error: 'Too many incorrect App Code attempts. Session revoked for security.' });
+      }
+      repository.cashierPairingSessions.update(session.id, { attempts });
+      return json(res, 400, { error: `Invalid App Code (${5 - attempts} attempts remaining). Check the code displayed in the companion app.` });
+    }
+
+    // Success! Activate cashier and complete session
+    const now = new Date().toISOString();
+    repository.cashierPairingSessions.update(session.id, {
+      status: 'completed',
+      completedAt: now
+    });
+
+    const cashier = repository.cashiers.update(session.cashierId, {
+      status: 'active',
+      pairedAt: now,
+      lastSeenAt: now
+    });
+
+    repository.cashierLogs.create({
+      id: 'clg_' + crypto.randomBytes(8).toString('hex'),
+      merchantId: m.id,
+      cashierId: cashier.id,
+      event: 'cashier_activated',
+      details: `Cashier "${cashier.name}" activated via App Code verification`,
+      ipAddress: clientIp,
+      createdAt: now
+    });
+
+    return json(res, 200, {
+      ok: true,
+      message: 'Cashier app successfully paired and activated!',
+      cashier
+    });
+  }
+
+  // Merchant Cashier List
+  if (p === '/api/cashier/list' && method === 'GET') {
+    const m = auth(req);
+    if (!m) return json(res, 401, { error: 'Authentication required' });
+
+    const list = repository.cashiers.findByMerchant(m.id);
+    return json(res, 200, { ok: true, cashiers: list });
+  }
+
+  // Merchant Cashier Logs
+  if (p === '/api/cashier/logs' && method === 'GET') {
+    const m = auth(req);
+    if (!m) return json(res, 401, { error: 'Authentication required' });
+
+    const logs = repository.cashierLogs.findByMerchant(m.id, 50);
+    return json(res, 200, { ok: true, logs });
+  }
+
+  // Revoke / Delete Cashier
+  if (p.startsWith('/api/cashier/') && method === 'DELETE') {
+    const m = auth(req);
+    if (!m) return json(res, 401, { error: 'Authentication required' });
+
+    const cashierId = p.split('/')[3];
+    const cashier = repository.cashiers.findById(cashierId);
+    if (!cashier || cashier.merchantId !== m.id) {
+      return json(res, 404, { error: 'Cashier not found' });
+    }
+
+    repository.cashiers.update(cashier.id, { status: 'revoked' });
+    repository.cashierLogs.create({
+      id: 'clg_' + crypto.randomBytes(8).toString('hex'),
+      merchantId: m.id,
+      cashierId: cashier.id,
+      event: 'cashier_revoked',
+      details: `Cashier "${cashier.name}" revoked by merchant`,
+      ipAddress: clientIp,
+      createdAt: new Date().toISOString()
+    });
+
+    return json(res, 200, { ok: true, message: 'Cashier revoked successfully.' });
+  }
+
   /* ── Automated Payment Verification Webhook (Android Companion) ── */
   if (p === '/api/v1/webhook/verify-payment') {
     const rl = checkRateLimit(clientIp, 'webhook_companion', 60, 60 * 1000);
@@ -1717,13 +2041,24 @@ async function route(req, res) {
       repository.apiKeys.updateLastUsed(key.id);
       key.lastUsedAt = new Date().toISOString();
 
+      let cashierId = b.cashierId ? String(b.cashierId).trim() : null;
+      if (cashierId) {
+        const csh = repository.cashiers.findById(cashierId);
+        if (csh && csh.merchantId === key.merchantId) {
+          repository.cashiers.update(csh.id, { lastSeenAt: new Date().toISOString() });
+        } else {
+          cashierId = null;
+        }
+      }
+
       const reconResult = reconcileCompanionPayment({
         repository,
         merchantId: key.merchantId,
         amount,
         utr,
         customerUpi,
-        timestamp
+        timestamp,
+        cashierId
       });
 
       if (reconResult.ambiguous) {

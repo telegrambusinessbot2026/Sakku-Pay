@@ -422,16 +422,108 @@
       </section>
 
       <!-- ─────────────────────────────────────
-           PAGE: COMPANION APP
+           PAGE: COMPANION APP & CASHIER SETTINGS
       ───────────────────────────────────── -->
       <section class="page" id="companion">
         <div class="heading">
           <div>
-            <p class="eyebrow">AUTOMATED VERIFICATION</p>
-            <h1>Android Companion App</h1>
-            <p>Real-time payment verification without relying on third-party payment gateways.</p>
+            <p class="eyebrow">CASHIER SETTINGS &amp; COLLECT APPS</p>
+            <h1>Android Companion &amp; Cashier Setup</h1>
+            <p>Connect and manage cashier Android devices, pair PhonePe Business, Paytm Business, and Google Pay for Business, and verify UPI payments in real-time.</p>
+          </div>
+          <div class="heading-actions">
+            <button class="primary" id="btn-open-cashier-modal" onclick="openCashierModal()" style="display:inline-flex;align-items:center;gap:8px">
+              <span>+ Connect by App</span>
+            </button>
+            <button class="outline" onclick="loadCashiers(); loadCashierLogs();" title="Refresh Cashiers and Logs">
+              <span>↻ Refresh</span>
+            </button>
           </div>
         </div>
+
+        <!-- Active Pairing Session Resume Banner (Dynamic) -->
+        <div id="cashier-session-resume-banner" class="panel" style="display:none;margin-bottom:24px;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.4);border-radius:12px;padding:16px 20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span style="font-size:22px">⚡</span>
+              <div>
+                <strong style="color:#FFFFFF;font-size:14px;display:block">Active Cashier Pairing Session in Progress</strong>
+                <p style="color:#CBD5E1;font-size:12.5px;margin:2px 0 0" id="cashier-session-resume-text">A pairing session is currently active. You can resume setup or enter the App Code.</p>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="primary btn-sm" onclick="resumeActiveCashierSession()">Resume Pairing →</button>
+              <button class="btn btn-outline btn-sm" onclick="dismissActiveCashierSession()">Dismiss</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Attached Cashiers / Collect Apps Panel -->
+        <article class="panel" style="margin-bottom:24px">
+          <div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+            <div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <h2 style="margin:0">Attached Cashiers</h2>
+                <span id="cashier-count-badge" class="pill" style="background:rgba(99,102,241,0.18);color:#A5B4FC;border:1px solid rgba(99,102,241,0.3)">0 Active</span>
+              </div>
+              <p style="margin:4px 0 0;color:var(--muted);font-size:12.5px">Authorized merchant Android devices running SakkuPay Companion to detect credit notifications</p>
+            </div>
+            <button class="primary btn-sm" onclick="openCashierModal()" style="display:inline-flex;align-items:center;gap:6px">
+              <span>+ Connect by App</span>
+            </button>
+          </div>
+
+          <div class="scroll">
+            <table id="cashier-table">
+              <thead>
+                <tr>
+                  <th>CASHIER / DEVICE</th>
+                  <th>PAYMENT PROVIDER</th>
+                  <th>PHONE NUMBER</th>
+                  <th>UPI ID</th>
+                  <th>STATUS</th>
+                  <th>PAIRED / LAST SEEN</th>
+                  <th>ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody id="cashier-table-body">
+                <tr>
+                  <td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">Loading connected cashiers…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <!-- Attached Cashier Audit Logs Panel -->
+        <article class="panel" style="margin-bottom:24px">
+          <div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px">
+            <div>
+              <h2 style="margin:0">Attached Cashier Logs</h2>
+              <p style="margin:4px 0 0;color:var(--muted);font-size:12.5px">Security audit trail of cashier pairing, heartbeats, and settlement verification signals</p>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="loadCashierLogs()">↻ Refresh Logs</button>
+          </div>
+
+          <div class="scroll">
+            <table id="cashier-logs-table">
+              <thead>
+                <tr>
+                  <th>TIMESTAMP</th>
+                  <th>CASHIER</th>
+                  <th>EVENT</th>
+                  <th>DETAILS</th>
+                  <th>IP ADDRESS</th>
+                </tr>
+              </thead>
+              <tbody id="cashier-logs-table-body">
+                <tr>
+                  <td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">Loading audit trail…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
 
         <!-- APK Download & Distribution Card -->
         <article class="panel" style="margin-bottom:24px;background:linear-gradient(135deg,#131A29 0%,#18233A 100%);border:1px solid rgba(99,102,241,0.3);box-shadow:0 12px 30px rgba(0,0,0,0.4)">
@@ -1226,6 +1318,186 @@
         <strong style="color:#34D399;font-size:12px;display:block;margin-bottom:2px">✓ Zero Credentials Stored in Binary</strong>
         <p style="color:var(--muted);font-size:11.5px;margin:0">The APK contains no embedded passwords or merchant keys. You configure your Merchant ID and API Key securely via the app's settings screen after installation.</p>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 2e: Connect Cashier by App (Two-Stage Secure Pairing) -->
+<div class="backdrop" id="cashier-connect-modal">
+  <div class="modal" style="max-width:580px;width:95%;max-height:92vh;overflow-y:auto;padding:26px">
+    <button class="close" onclick="closeCashierModal()" aria-label="Close modal">×</button>
+
+    <!-- Modal Header -->
+    <div style="margin-bottom:20px">
+      <span class="pill" style="background:rgba(99,102,241,0.2);color:#A5B4FC;border:1px solid rgba(99,102,241,0.4);font-size:11px;font-weight:700">TWO-STAGE SECURE CASHIER PAIRING</span>
+      <h2 style="font-size:20px;font-weight:800;color:#FFFFFF;margin:8px 0 4px" id="cashier-modal-title">Connect Cashier by App</h2>
+      <p style="color:var(--muted);font-size:13px;margin:0">Pair your Android phone running SakkuPay Companion with your merchant account.</p>
+    </div>
+
+    <!-- Step Progress Bar -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;position:relative">
+      <div style="position:absolute;top:50%;left:30px;right:30px;height:2px;background:rgba(255,255,255,0.1);z-index:1;transform:translateY(-50%)"></div>
+      <div id="cashier-step-progress-bar" style="position:absolute;top:50%;left:30px;width:0%;height:2px;background:#6366F1;z-index:2;transform:translateY(-50%);transition:width 0.3s ease"></div>
+
+      <!-- Step 1 Indicator -->
+      <div class="cashier-step-pill" id="step-pill-1" style="z-index:3;display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div id="step-circle-1" style="width:32px;height:32px;border-radius:50%;background:#6366F1;color:#FFFFFF;display:grid;place-items:center;font-weight:700;font-size:13px;border:2px solid #818CF8">1</div>
+        <span id="step-text-1" style="font-size:11px;color:#FFFFFF;font-weight:600">Details</span>
+      </div>
+
+      <!-- Step 2 Indicator -->
+      <div class="cashier-step-pill" id="step-pill-2" style="z-index:3;display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div id="step-circle-2" style="width:32px;height:32px;border-radius:50%;background:#1E293B;color:#94A3B8;display:grid;place-items:center;font-weight:700;font-size:13px;border:2px solid rgba(255,255,255,0.15)">2</div>
+        <span id="step-text-2" style="font-size:11px;color:#94A3B8;font-weight:600">Server Code</span>
+      </div>
+
+      <!-- Step 3 Indicator -->
+      <div class="cashier-step-pill" id="step-pill-3" style="z-index:3;display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div id="step-circle-3" style="width:32px;height:32px;border-radius:50%;background:#1E293B;color:#94A3B8;display:grid;place-items:center;font-weight:700;font-size:13px;border:2px solid rgba(255,255,255,0.15)">3</div>
+        <span id="step-text-3" style="font-size:11px;color:#94A3B8;font-weight:600">Verify App</span>
+      </div>
+    </div>
+
+    <!-- ================= STEP 1: Details & Provider ================= -->
+    <div id="cashier-step-1" class="cashier-step-content">
+      <form id="cashier-details-form" onsubmit="submitCashierSession(event)" style="display:flex;flex-direction:column;gap:16px">
+        <div>
+          <label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:8px;color:#E2E8F0">Select Supported Payment Provider *</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="provider-selector-grid">
+            <label class="provider-option-card" style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.12);cursor:pointer">
+              <input type="radio" name="cashier_provider" value="phonepe" checked style="accent-color:#818CF8">
+              <div>
+                <strong style="display:block;font-size:13px;color:#FFFFFF">PhonePe Business</strong>
+                <small style="color:var(--muted);font-size:11px">Auto-verify soundbox/push alerts</small>
+              </div>
+            </label>
+            <label class="provider-option-card" style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.12);cursor:pointer">
+              <input type="radio" name="cashier_provider" value="paytm" style="accent-color:#818CF8">
+              <div>
+                <strong style="display:block;font-size:13px;color:#FFFFFF">Paytm Business</strong>
+                <small style="color:var(--muted);font-size:11px">Auto-reconcile merchant QR credits</small>
+              </div>
+            </label>
+            <label class="provider-option-card" style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.12);cursor:pointer">
+              <input type="radio" name="cashier_provider" value="gpay" style="accent-color:#818CF8">
+              <div>
+                <strong style="display:block;font-size:13px;color:#FFFFFF">Google Pay Business</strong>
+                <small style="color:var(--muted);font-size:11px">Real-time GPay alert detection</small>
+              </div>
+            </label>
+            <label class="provider-option-card" style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.12);cursor:pointer">
+              <input type="radio" name="cashier_provider" value="other" style="accent-color:#818CF8">
+              <div>
+                <strong style="display:block;font-size:13px;color:#FFFFFF">Other UPI Business</strong>
+                <small style="color:var(--muted);font-size:11px">Generic UPI &amp; Bank SMS alerts</small>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;color:#E2E8F0">Cashier / Counter Device Name *</label>
+          <input type="text" id="cashier-name-input" placeholder="e.g. Counter 1 — Samsung Galaxy" required style="width:100%;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card-inner);color:#FFFFFF;outline:none">
+        </div>
+
+        <div>
+          <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;color:#E2E8F0">Registered Merchant Mobile (10 Digits) *</label>
+          <input type="tel" id="cashier-phone-input" maxlength="10" placeholder="e.g. 9876543210" pattern="[0-9]{10}" required style="width:100%;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card-inner);color:#FFFFFF;outline:none">
+          <small style="color:var(--muted);font-size:11px">Mobile number linked to the merchant UPI business account</small>
+        </div>
+
+        <div>
+          <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;color:#E2E8F0">Receiving Business UPI ID *</label>
+          <input type="text" id="cashier-upi-input" placeholder="e.g. storename@ybl or merchant@paytm" required style="width:100%;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card-inner);color:#FFFFFF;outline:none">
+        </div>
+
+        <div id="cashier-step-1-error" style="display:none;color:#F87171;font-size:12px;padding:8px 12px;background:rgba(239,68,68,0.1);border-radius:6px;border:1px solid rgba(239,68,68,0.3)"></div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">
+          <button type="button" class="btn btn-outline" onclick="closeCashierModal()">Cancel</button>
+          <button type="submit" class="primary" id="btn-generate-server-code" style="padding:10px 20px">Generate Server Code →</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- ================= STEP 2: Server Code & Dedicated Tutorial ================= -->
+    <div id="cashier-step-2" class="cashier-step-content" style="display:none">
+      <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:18px;margin-bottom:18px;text-align:center">
+        <span style="font-size:11px;font-weight:700;color:#A5B4FC;letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:6px">SINGLE-USE 12-DIGIT SERVER CODE</span>
+        <div style="font-size:28px;font-weight:800;letter-spacing:4px;color:#FFFFFF;font-family:monospace;margin:6px 0" id="cashier-display-server-code">0000 0000 0000</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:10px">
+          <button class="btn btn-outline btn-sm" id="btn-copy-server-code" onclick="copyServerCode()">📋 Copy Code</button>
+          <span id="cashier-expiry-timer" class="pill" style="background:rgba(251,146,60,0.15);color:#FB923C;border:1px solid rgba(251,146,60,0.3)">⏳ Expires in 15:00</span>
+        </div>
+      </div>
+
+      <!-- Tutorial Instructions -->
+      <div style="border-left:3px solid #6366F1;padding-left:14px;margin-bottom:18px">
+        <h4 style="color:#FFFFFF;font-size:14px;margin:0 0 8px">Step-by-Step App Connection Tutorial</h4>
+        <ol style="margin:0;padding-left:18px;color:#CBD5E1;font-size:12.5px;line-height:1.7">
+          <li>Install the official SakkuPay Companion APK on your merchant phone:
+            <div style="margin:6px 0">
+              <button class="btn btn-outline btn-sm" onclick="downloadCompanionApk()" style="color:#818CF8;border-color:rgba(99,102,241,0.4)">⇩ Download sakkupay.apk</button>
+              <small style="color:var(--muted);display:block;font-size:11px;margin-top:3px">✓ Your session will remain active while downloading!</small>
+            </div>
+          </li>
+          <li>Open <strong>SakkuPay Companion</strong> and set Server URL to: <code id="cashier-tutorial-server-url" style="color:#A5B4FC;background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px">https://sakkupay.onrender.com</code></li>
+          <li>Type the <strong>12-digit Server Code</strong> displayed above into the app and tap <strong>Verify Server Code</strong>.</li>
+          <li>When prompted, grant <strong>Notification Access</strong> permission in Android Settings.</li>
+          <li>The app will immediately generate a <strong>6-digit App Code</strong> on screen.</li>
+        </ol>
+      </div>
+
+      <!-- Polling / App Code Status Indicator -->
+      <div id="cashier-pairing-poll-box" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);margin-bottom:18px">
+        <div id="cashier-poll-spinner" style="width:16px;height:16px;border:2px solid #818CF8;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div>
+        <div style="flex:1">
+          <strong id="cashier-poll-title" style="color:#FFFFFF;font-size:13px;display:block">Listening for Companion App connection…</strong>
+          <span id="cashier-poll-sub" style="color:var(--muted);font-size:11.5px">Enter the code on your phone. This dashboard will update automatically.</span>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <button type="button" class="btn btn-outline btn-sm" onclick="switchCashierStep(1)">← Back to Details</button>
+        <button type="button" class="primary" id="btn-proceed-to-step-3" onclick="switchCashierStep(3)">Enter 6-Digit App Code →</button>
+      </div>
+    </div>
+
+    <!-- ================= STEP 3: Verify Cashier (App Code Entry) ================= -->
+    <div id="cashier-step-3" class="cashier-step-content" style="display:none">
+      <form id="cashier-verify-form" onsubmit="submitVerifyAppCode(event)" style="display:flex;flex-direction:column;gap:16px">
+        <div style="text-align:center;padding:12px 0">
+          <h4 style="color:#FFFFFF;font-size:16px;margin:0 0 6px">Verify Cashier App Code</h4>
+          <p style="color:var(--muted);font-size:12.5px;margin:0">Enter the single-use 6-digit code displayed on your SakkuPay Companion app screen.</p>
+        </div>
+
+        <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+          <input type="text" id="cashier-app-code-input" maxlength="6" pattern="[0-9]{6}" placeholder="••••••" autocomplete="one-time-code" required
+            style="width:240px;height:56px;text-align:center;font-size:28px;font-weight:800;letter-spacing:8px;font-family:monospace;border:2px solid #6366F1;border-radius:12px;background:var(--card-inner);color:#FFFFFF;outline:none">
+          <small style="color:var(--muted);font-size:11.5px">6-digit number shown on device</small>
+        </div>
+
+        <div id="cashier-verify-error" style="display:none;color:#F87171;font-size:12px;padding:8px 12px;background:rgba(239,68,68,0.1);border-radius:6px;border:1px solid rgba(239,68,68,0.3);text-align:center"></div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+          <button type="button" class="btn btn-outline" onclick="switchCashierStep(2)">← Back to Tutorial</button>
+          <button type="submit" class="primary" id="btn-verify-app-code" style="padding:10px 24px">Verify &amp; Activate Cashier ✓</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- ================= STEP 4: Activation Success ================= -->
+    <div id="cashier-step-success" class="cashier-step-content" style="display:none;text-align:center;padding:20px 0">
+      <div style="width:64px;height:64px;border-radius:50%;background:rgba(16,185,129,0.15);border:2px solid #10B981;color:#10B981;display:grid;place-items:center;font-size:32px;margin:0 auto 16px">
+        ✓
+      </div>
+      <h3 style="color:#FFFFFF;font-size:18px;margin:0 0 6px">Cashier Successfully Activated!</h3>
+      <p style="color:var(--muted);font-size:13px;max-width:380px;margin:0 auto 20px" id="cashier-success-msg">
+        Your companion device is now authorized and listening for real-time UPI credit alerts.
+      </p>
+      <button type="button" class="primary" onclick="closeCashierModal(); loadCashiers(); loadCashierLogs();" style="padding:10px 28px">
+        Done / View Cashiers
+      </button>
     </div>
   </div>
 </div>

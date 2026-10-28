@@ -63,8 +63,10 @@ class PaymentNotificationListener : NotificationListenerService() {
         var conn: HttpURLConnection? = null
         try {
             val endpoint = serverUrl.trimEnd('/') + "/api/v1/webhook/verify-payment"
+            val cashierId = Prefs.cashierId(this)
             val body = JSONObject().apply {
                 put("merchantId", merchantId.trim())
+                if (cashierId.isNotBlank()) put("cashierId", cashierId.trim())
                 put("amount", p.amount)
                 put("utr", p.utr)
                 put("timestamp", Instant.now().toString())

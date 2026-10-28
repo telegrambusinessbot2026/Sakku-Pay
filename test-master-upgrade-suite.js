@@ -172,7 +172,7 @@ async function runMasterSuite() {
       const stringsPath = path.join(__dirname, 'companion-android/app/src/main/res/values/strings.xml');
       assert(fs.existsSync(stringsPath), 'strings.xml must exist');
       const stringsXml = fs.readFileSync(stringsPath, 'utf8');
-      assert(stringsXml.includes('<string name="app_name">SakkuPay</string>'), 'app_name must be SakkuPay');
+      assert(stringsXml.includes('<string name="app_name">SakkuPay Companion</string>') || stringsXml.includes('<string name="app_name">SakkuPay</string>'), 'app_name must be SakkuPay Companion or SakkuPay');
       assert(stringsXml.includes('notification_listener_description'), 'notification_listener_description must be defined');
       pass('strings.xml defines app_name="SakkuPay" and official notification listener description');
     }

@@ -106,7 +106,8 @@ function reconcileCompanionPayment({
   amount,
   utr,
   customerUpi,
-  timestamp
+  timestamp,
+  cashierId
 }) {
   const sanitizedUtr = String(utr || '').trim().replace(/[^a-zA-Z0-9]/g, '');
   const rawUtr = String(utr || '').trim();
@@ -168,6 +169,7 @@ function reconcileCompanionPayment({
     const updated = repository.transactions.update(candidate.id, {
       status: 'success',
       utr: sanitizedUtr,
+      cashierId: cashierId || candidate.cashierId || null,
       paidAt: eventTime,
       verifiedAt: eventTime,
       verifiedBy: 'android-companion',
@@ -263,6 +265,7 @@ function reconcileCompanionPayment({
     const updated = repository.transactions.update(candidate.id, {
       status: 'success',
       utr: sanitizedUtr,
+      cashierId: cashierId || candidate.cashierId || null,
       paidAt: eventTime,
       verifiedAt: eventTime,
       verifiedBy: 'android-companion',
@@ -293,6 +296,7 @@ function reconcileCompanionPayment({
   const directTx = {
     id: `txn_${crypto.randomBytes(8).toString('hex')}`,
     merchantId,
+    cashierId: cashierId || null,
     reference: 'SP' + crypto.randomBytes(5).toString('hex').toUpperCase(),
     customerName: customerUpi ? customerUpi.split('@')[0] : 'UPI Customer',
     customerEmail: '',

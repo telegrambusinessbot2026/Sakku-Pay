@@ -84,7 +84,8 @@ function createRepository(db = getDatabase()) {
       providerReference: row.providerReference || null,
       verifiedAt: row.verifiedAt || null,
       auditLog: row.auditLog || null,
-      createdAt: row.createdAt
+      createdAt: row.createdAt,
+      cashierId: row.cashierId || null
     };
   }
 
@@ -245,8 +246,8 @@ function createRepository(db = getDatabase()) {
     txFindByMerchant: db.prepare('SELECT * FROM transactions WHERE merchantId = ? ORDER BY createdAt DESC'),
     txListAll: db.prepare('SELECT * FROM transactions ORDER BY createdAt DESC'),
     txInsert: db.prepare(`
-      INSERT INTO transactions (id, merchantId, linkId, reference, customerName, customerEmail, customerUpi, amount, amount_paise, status, utr, verifiedBy, paidAt, merchantNote, utrSubmittedAt, reconciliationStatus, ambiguityReason, providerReference, verifiedAt, auditLog, createdAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO transactions (id, merchantId, linkId, reference, customerName, customerEmail, customerUpi, amount, amount_paise, status, utr, verifiedBy, paidAt, merchantNote, utrSubmittedAt, reconciliationStatus, ambiguityReason, providerReference, verifiedAt, auditLog, createdAt, cashierId)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         linkId=excluded.linkId,
         reference=excluded.reference,
@@ -265,7 +266,8 @@ function createRepository(db = getDatabase()) {
         ambiguityReason=excluded.ambiguityReason,
         providerReference=excluded.providerReference,
         verifiedAt=excluded.verifiedAt,
-        auditLog=excluded.auditLog
+        auditLog=excluded.auditLog,
+        cashierId=excluded.cashierId
     `),
     txDelete: db.prepare('DELETE FROM transactions WHERE id = ?'),
 
@@ -628,7 +630,8 @@ function createRepository(db = getDatabase()) {
           tx.providerReference || null,
           tx.verifiedAt || null,
           tx.auditLog || null,
-          tx.createdAt || new Date().toISOString()
+          tx.createdAt || new Date().toISOString(),
+          tx.cashierId || null
         );
         return this.findById(tx.id);
       },
@@ -659,7 +662,8 @@ function createRepository(db = getDatabase()) {
           merged.providerReference || null,
           merged.verifiedAt || null,
           merged.auditLog || null,
-          merged.createdAt
+          merged.createdAt,
+          merged.cashierId || null
         );
         return this.findById(id);
       },
@@ -1209,6 +1213,157 @@ function createRepository(db = getDatabase()) {
       },
       listAll(limit = 100) {
         return db.prepare('SELECT * FROM support_queries ORDER BY createdAt DESC LIMIT ?').all(limit);
+      }
+    },
+
+    // ── Cashiers (Milestone 8) ────────────────────────────────────────────────
+    cashiers: {
+      create(c) {
+        db.prepare(`
+          INSERT INTO cashiers (id, merchantId, name, provider, phoneNumber, upiId, status, pairedAt, lastSeenAt, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          c.id,
+          c.merchantId,
+          c.name,
+          c.provider || 'phonepe',
+          c.phoneNumber,
+          c.upiId,
+          c.status || 'pending_pairing',
+          c.pairedAt || null,
+          c.lastSeenAt || null,
+          c.createdAt || new Date().toISOString()
+        );
+        return this.findById(c.id);
+      },
+      findById(id) {
+        if (!id) return null;
+        return db.prepare('SELECT * FROM cashiers WHERE id = ?').get(id) || null;
+      },
+      findByMerchant(merchantId) {
+        if (!merchantId) return [];
+        return db.prepare('SELECT * FROM cashiers WHERE merchantId = ? ORDER BY createdAt DESC').all(merchantId);
+      },
+      update(id, fields) {
+        const existing = this.findById(id);
+        if (!existing) return null;
+        const merged = { ...existing, ...fields };
+        db.prepare(`
+          UPDATE cashiers SET
+            name = ?,
+            provider = ?,
+            phoneNumber = ?,
+            upiId = ?,
+            status = ?,
+            pairedAt = ?,
+            lastSeenAt = ?
+          WHERE id = ?
+        `).run(
+          merged.name,
+          merged.provider,
+          merged.phoneNumber,
+          merged.upiId,
+          merged.status,
+          merged.pairedAt,
+          merged.lastSeenAt,
+          id
+        );
+        return this.findById(id);
+      },
+      delete(id) {
+        if (!id) return false;
+        const res = db.prepare('DELETE FROM cashiers WHERE id = ?').run(id);
+        return res.changes > 0;
+      }
+    },
+
+    // ── Cashier Pairing Sessions (Milestone 8) ────────────────────────────────
+    cashierPairingSessions: {
+      create(s) {
+        db.prepare(`
+          INSERT INTO cashier_pairing_sessions (id, merchantId, cashierId, serverCodeHash, appCodeHash, status, attempts, expiresAt, completedAt, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          s.id,
+          s.merchantId,
+          s.cashierId,
+          s.serverCodeHash,
+          s.appCodeHash || null,
+          s.status || 'pending_server_code',
+          s.attempts || 0,
+          s.expiresAt,
+          s.completedAt || null,
+          s.createdAt || new Date().toISOString()
+        );
+        return this.findById(s.id);
+      },
+      findById(id) {
+        if (!id) return null;
+        return db.prepare('SELECT * FROM cashier_pairing_sessions WHERE id = ?').get(id) || null;
+      },
+      findByServerCodeHash(hash) {
+        if (!hash) return null;
+        return db.prepare('SELECT * FROM cashier_pairing_sessions WHERE serverCodeHash = ? ORDER BY createdAt DESC LIMIT 1').get(hash) || null;
+      },
+      findByAppCodeHash(hash) {
+        if (!hash) return null;
+        return db.prepare('SELECT * FROM cashier_pairing_sessions WHERE appCodeHash = ? ORDER BY createdAt DESC LIMIT 1').get(hash) || null;
+      },
+      findActiveByMerchant(merchantId) {
+        if (!merchantId) return [];
+        const now = new Date().toISOString();
+        return db.prepare(`
+          SELECT * FROM cashier_pairing_sessions
+          WHERE merchantId = ? AND status IN ('pending_server_code', 'server_code_verified', 'app_code_generated') AND expiresAt > ?
+          ORDER BY createdAt DESC
+        `).all(merchantId, now);
+      },
+      update(id, fields) {
+        const existing = this.findById(id);
+        if (!existing) return null;
+        const merged = { ...existing, ...fields };
+        db.prepare(`
+          UPDATE cashier_pairing_sessions SET
+            appCodeHash = ?,
+            status = ?,
+            attempts = ?,
+            completedAt = ?
+          WHERE id = ?
+        `).run(
+          merged.appCodeHash,
+          merged.status,
+          merged.attempts,
+          merged.completedAt,
+          id
+        );
+        return this.findById(id);
+      }
+    },
+
+    // ── Cashier Audit Logs (Milestone 8) ──────────────────────────────────────
+    cashierLogs: {
+      create(l) {
+        db.prepare(`
+          INSERT INTO cashier_logs (id, merchantId, cashierId, event, details, ipAddress, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          l.id,
+          l.merchantId,
+          l.cashierId || null,
+          l.event,
+          l.details || null,
+          l.ipAddress || null,
+          l.createdAt || new Date().toISOString()
+        );
+        return db.prepare('SELECT * FROM cashier_logs WHERE id = ?').get(l.id) || null;
+      },
+      findByMerchant(merchantId, limit = 50) {
+        if (!merchantId) return [];
+        return db.prepare('SELECT * FROM cashier_logs WHERE merchantId = ? ORDER BY createdAt DESC LIMIT ?').all(merchantId, limit);
+      },
+      findByCashier(cashierId, limit = 50) {
+        if (!cashierId) return [];
+        return db.prepare('SELECT * FROM cashier_logs WHERE cashierId = ? ORDER BY createdAt DESC LIMIT ?').all(cashierId, limit);
       }
     },
 
