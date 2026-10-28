@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SakkuPay</string>
+    <string name="notification_listener_label">SakkuPay Payment Verifier</string>
+    <string name="notification_listener_description">SakkuPay requires notification access to detect incoming UPI payment alerts and bank SMS for your merchant account.</string>
+</resources>

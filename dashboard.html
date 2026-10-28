@@ -340,6 +340,26 @@
           </div>
           <button class="primary" onclick="openUpiModal(null)">+ Add UPI Account</button>
         </div>
+
+        <!-- Onboarding Checklist Banner -->
+        <article class="panel" style="margin-bottom:24px;background:linear-gradient(135deg,#131A29 0%,#18233A 100%);border:1px solid rgba(99,102,241,0.3)">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                <span class="pill" style="background:rgba(99,102,241,0.2);color:#A5B4FC;border:1px solid rgba(99,102,241,0.4)">ONBOARDING STEP</span>
+                <strong style="color:#FFFFFF;font-size:15px">Connect UPI &amp; Enable Automatic Verification</strong>
+              </div>
+              <p style="color:var(--muted);font-size:13px;margin:0;line-height:1.5">
+                Link your bank UPI ID below, then download the official SakkuPay Android Companion App (<strong>sakkupay.apk</strong>) to verify incoming customer UPI payments in real time.
+              </p>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-outline btn-sm" onclick="downloadCompanionApk()">⇩ Download sakkupay.apk</button>
+              <button class="primary btn-sm" onclick="go('companion')">Setup Guide &amp; Credentials →</button>
+            </div>
+          </div>
+        </article>
+
         <div class="upi-grid" id="upi-cards">
           <div class="loading">Loading connected UPI accounts…</div>
         </div>
@@ -417,23 +437,23 @@
         <article class="panel" style="margin-bottom:24px;background:linear-gradient(135deg,#131A29 0%,#18233A 100%);border:1px solid rgba(99,102,241,0.3);box-shadow:0 12px 30px rgba(0,0,0,0.4)">
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px">
             <div style="display:flex;align-items:center;gap:18px">
-              <div style="width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#4F46E5 0%,#818CF8 100%);display:grid;place-items:center;font-size:28px;box-shadow:0 8px 20px rgba(79,70,229,0.4)">
-                📱
+              <div style="width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#4F46E5 0%,#818CF8 100%);display:grid;place-items:center;box-shadow:0 8px 20px rgba(79,70,229,0.4)">
+                <img src="/assets/logo-icon.svg" alt="SakkuPay" style="width:36px;height:36px">
               </div>
               <div>
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                  <strong style="color:#FFFFFF;font-size:17px;font-weight:800">SakkuPay Merchant Companion APK</strong>
-                  <span class="pill" style="background:rgba(99,102,241,0.2);color:#A5B4FC;border:1px solid rgba(99,102,241,0.4)">v1.0.0 (Build 1)</span>
+                  <strong style="color:#FFFFFF;font-size:17px;font-weight:800">SakkuPay Android Companion APK</strong>
+                  <span class="pill" style="background:rgba(99,102,241,0.2);color:#A5B4FC;border:1px solid rgba(99,102,241,0.4)">v1.0 (Build 1)</span>
                 </div>
                 <p style="color:var(--muted);font-size:13px;margin:0;line-height:1.5">
-                  Package: <code style="color:#A5B4FC;font-family:monospace">in.sakkupay.companion</code> · Target: Android 8.0+ (API 26–35) · Zero Embedded Secrets
+                  Package: <code style="color:#A5B4FC;font-family:monospace">in.sakkupay.companion</code> · Target: Android 8.0+ (API 26–35) · Filename: <strong style="color:#FFFFFF">sakkupay.apk</strong>
                 </p>
               </div>
             </div>
 
             <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
               <button class="primary" id="btn-download-apk" onclick="downloadCompanionApk()" style="padding:12px 24px;font-size:13.5px;font-weight:700;border-radius:10px;display:inline-flex;align-items:center;gap:8px">
-                <span>⇩ Download Android APK</span>
+                <span>⇩ Download sakkupay.apk</span>
               </button>
               <button class="btn btn-outline" onclick="modal('companion-build-modal', true)" style="padding:11px 18px;font-size:13px">
                 Build Instructions &amp; CI/CD ⚙
@@ -456,6 +476,19 @@
           </div>
         </article>
 
+        <!-- Payment Truth & Settlement Notice -->
+        <article class="panel" style="margin-bottom:24px;background:#0D131F;border:1px solid rgba(251,146,60,0.25);border-radius:12px;padding:16px 20px">
+          <div style="display:flex;align-items:flex-start;gap:14px">
+            <span style="color:#FB923C;font-size:18px;line-height:1">ℹ</span>
+            <div>
+              <strong style="color:#FED7AA;font-size:13.5px;display:block;margin-bottom:4px">Settlement Verification Signal Notice</strong>
+              <p style="color:var(--muted);font-size:12.5px;line-height:1.55;margin:0">
+                Incoming UPI app notifications and bank SMS are real-time detection signals. SakkuPay matches the UTR and amount immediately, displaying verification signal receipt until confirmed against your bank settlement ledger.
+              </p>
+            </div>
+          </div>
+        </article>
+
         <!-- Hero card -->
         <article class="companion-hero-card">
           <div class="companion-hero-header">
@@ -471,18 +504,18 @@
           <div class="companion-steps-grid">
             <div class="companion-step-box">
               <div class="companion-step-num">1</div>
-              <h4>Install App</h4>
-              <p>Install the lightweight SakkuPay Merchant Companion APK on your receiving phone.</p>
+              <h4>Install sakkupay.apk</h4>
+              <p>Download and install <strong>sakkupay.apk</strong> on your Android device (Android 8.0 to 15).</p>
             </div>
             <div class="companion-step-box">
               <div class="companion-step-num">2</div>
               <h4>Grant Access</h4>
-              <p>Enable Notification Access for your business UPI apps (GPay, PhonePe, Paytm, SMS).</p>
+              <p>Enable Notification Access for SakkuPay.<br><span style="color:#A5B4FC;font-size:11px">On Android 13/14/15: Settings → Apps → SakkuPay → Tap ⋮ → "Allow restricted settings" first.</span></p>
             </div>
             <div class="companion-step-box">
               <div class="companion-step-num">3</div>
               <h4>Enter Credentials</h4>
-              <p>Paste your Merchant ID &amp; Server Webhook URL below into the companion app.</p>
+              <p>Enter your Server URL and API Key into the companion app and tap Save.</p>
             </div>
             <div class="companion-step-box">
               <div class="companion-step-num">4</div>
@@ -962,124 +995,135 @@
 
 <!-- Modal 2: Create Payment Link -->
 <div class="backdrop" id="link-modal">
-  <div class="modal" style="max-width:560px">
-    <button class="close">×</button>
-    <p class="eyebrow">NEW PAYMENT LINK</p>
-    <h2>Create Payment Link</h2>
-    <p>Generate a shareable checkout link, dynamic QR code, and custom theme.</p>
-    <form id="link-form">
-      <label>
-        What are you collecting for?
-        <input id="link-name" required placeholder="e.g. Handcrafted Leather Bag / Consultation">
-        <span class="input-hint">Displayed prominently on your customer checkout page</span>
-      </label>
+  <div class="modal payment-link-builder-modal">
+    <!-- Fixed Header -->
+    <div class="builder-modal-header">
+      <button class="close" type="button" onclick="modal('link-modal', false)" aria-label="Close dialog">×</button>
+      <div class="eyebrow">NEW PAYMENT LINK</div>
+      <h2>Create Payment Link</h2>
+      <p>Generate a shareable checkout link, dynamic QR code, and custom theme.</p>
+    </div>
 
-      <label>
-        Payment Description (Optional)
-        <input id="link-description" placeholder="Brief note or receipt instructions for customer">
-        <span class="input-hint">Shown beneath the item title on the checkout page</span>
-      </label>
+    <!-- Form with scrollable body and sticky footer -->
+    <form id="link-form" class="builder-modal-form">
+      <div class="builder-modal-body">
+        <label>
+          What are you collecting for?
+          <input id="link-name" required placeholder="e.g. Handcrafted Leather Bag / Consultation">
+          <span class="input-hint">Displayed prominently on your customer checkout page</span>
+        </label>
 
-      <label>
-        Pricing Type
-        <div class="type-selector-group">
-          <button type="button" class="type-option-btn active" id="btn-type-fixed" onclick="setLinkPricingType('fixed')">
-            <span>● Fixed Price</span>
-          </button>
-          <button type="button" class="type-option-btn" id="btn-type-open" onclick="setLinkPricingType('open')">
-            <span>○ Customer Decides</span>
-          </button>
+        <label>
+          Payment Description (Optional)
+          <input id="link-description" placeholder="Brief note or receipt instructions for customer">
+          <span class="input-hint">Shown beneath the item title on the checkout page</span>
+        </label>
+
+        <label>
+          Pricing Type
+          <div class="type-selector-group">
+            <button type="button" class="type-option-btn active" id="btn-type-fixed" onclick="setLinkPricingType('fixed')">
+              <span>● Fixed Price</span>
+            </button>
+            <button type="button" class="type-option-btn" id="btn-type-open" onclick="setLinkPricingType('open')">
+              <span>○ Customer Decides</span>
+            </button>
+          </div>
+          <input type="hidden" id="link-type" value="fixed">
+        </label>
+
+        <label id="link-amount-wrap">
+          Amount (₹)
+          <input id="link-amount" type="number" min="1" placeholder="499">
+          <span class="input-hint">Preset amount charged to customer</span>
+        </label>
+
+        <label>
+          Custom URL Slug
+          <div class="slug-input-wrapper">
+            <span class="slug-domain-prefix" id="slug-prefix-label">sakkupay.in/pay/</span>
+            <input class="slug-field-input" id="link-slug" placeholder="custom-slug" required>
+          </div>
+          <span class="input-hint">Lowercase letters, numbers, and dashes only</span>
+        </label>
+
+        <label>
+          Receiving UPI Account
+          <select id="link-upi-select"></select>
+          <span class="input-hint">Direct credit to your connected bank</span>
+        </label>
+
+        <!-- Template Selection Gallery (Phase 2) -->
+        <div style="margin-top:4px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <label style="font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.7px;margin:0">
+              Checkout Page Template Design
+            </label>
+            <button type="button" class="btn btn-outline btn-sm" onclick="previewCurrentTemplate()" style="padding:4px 10px;font-size:11.5px">
+              👁 Preview Selected Design
+            </button>
+          </div>
+
+          <div class="template-gallery-grid" id="template-options-grid">
+            <!-- Template 1: Classic -->
+            <div class="template-option-card active" data-template="classic" onclick="selectLinkTemplate('classic')">
+              <div class="template-thumb template-thumb-classic">
+                <span class="thumb-badge">Indigo</span>
+                <div class="thumb-qr"></div>
+              </div>
+              <strong>SakkuPay Classic</strong>
+              <small>Dark indigo fintech style with glowing status</small>
+            </div>
+
+            <!-- Template 2: Minimal -->
+            <div class="template-option-card" data-template="minimal" onclick="selectLinkTemplate('minimal')">
+              <div class="template-thumb template-thumb-minimal">
+                <span class="thumb-badge">Light</span>
+                <div class="thumb-qr"></div>
+              </div>
+              <strong>Minimal Clean</strong>
+              <small>Crisp Apple/Stripe light monochrome studio</small>
+            </div>
+
+            <!-- Template 3: Premium Dark -->
+            <div class="template-option-card" data-template="premium-dark" onclick="selectLinkTemplate('premium-dark')">
+              <div class="template-thumb template-thumb-premium-dark">
+                <span class="thumb-badge">Onyx</span>
+                <div class="thumb-qr"></div>
+              </div>
+              <strong>Premium Dark</strong>
+              <small>Matte titanium with glowing emerald accents</small>
+            </div>
+
+            <!-- Template 4: Modern Gradient -->
+            <div class="template-option-card" data-template="modern-gradient" onclick="selectLinkTemplate('modern-gradient')">
+              <div class="template-thumb template-thumb-modern-gradient">
+                <span class="thumb-badge">Cyber</span>
+                <div class="thumb-qr"></div>
+              </div>
+              <strong>Modern Gradient</strong>
+              <small>Cyberpunk cosmic glassmorphism aura</small>
+            </div>
+
+            <!-- Template 5: Compact UPI -->
+            <div class="template-option-card" data-template="compact-upi" onclick="selectLinkTemplate('compact-upi')">
+              <div class="template-thumb template-thumb-compact-upi">
+                <span class="thumb-badge">1-Tap</span>
+                <div class="thumb-apps"></div>
+              </div>
+              <strong>Compact UPI</strong>
+              <small>Mobile-first 1-tap express app buttons</small>
+            </div>
+          </div>
+          <input type="hidden" id="link-template" value="classic">
         </div>
-        <input type="hidden" id="link-type" value="fixed">
-      </label>
-
-      <label id="link-amount-wrap">
-        Amount (₹)
-        <input id="link-amount" type="number" min="1" placeholder="499">
-        <span class="input-hint">Preset amount charged to customer</span>
-      </label>
-
-      <label>
-        Custom URL Slug
-        <div class="slug-input-wrapper">
-          <span class="slug-domain-prefix" id="slug-prefix-label">sakkupay.in/pay/</span>
-          <input class="slug-field-input" id="link-slug" placeholder="custom-slug" required>
-        </div>
-        <span class="input-hint">Lowercase letters, numbers, and dashes only</span>
-      </label>
-
-      <label>
-        Receiving UPI Account
-        <select id="link-upi-select"></select>
-        <span class="input-hint">Direct credit to your connected bank</span>
-      </label>
-
-      <!-- Template Selection Gallery (Phase 2) -->
-      <div style="margin-top:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <label style="font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.7px;margin:0">
-            Checkout Page Template Design
-          </label>
-          <button type="button" class="btn btn-outline btn-sm" onclick="previewCurrentTemplate()" style="padding:4px 10px;font-size:11.5px">
-            👁 Preview Selected Design
-          </button>
-        </div>
-
-        <div class="template-gallery-grid" id="template-options-grid">
-          <!-- Template 1: Classic -->
-          <div class="template-option-card active" data-template="classic" onclick="selectLinkTemplate('classic')">
-            <div class="template-thumb template-thumb-classic">
-              <span class="thumb-badge">Indigo</span>
-              <div class="thumb-qr"></div>
-            </div>
-            <strong>SakkuPay Classic</strong>
-            <small>Dark indigo fintech style with glowing status</small>
-          </div>
-
-          <!-- Template 2: Minimal -->
-          <div class="template-option-card" data-template="minimal" onclick="selectLinkTemplate('minimal')">
-            <div class="template-thumb template-thumb-minimal">
-              <span class="thumb-badge">Light</span>
-              <div class="thumb-qr"></div>
-            </div>
-            <strong>Minimal Clean</strong>
-            <small>Crisp Apple/Stripe light monochrome studio</small>
-          </div>
-
-          <!-- Template 3: Premium Dark -->
-          <div class="template-option-card" data-template="premium-dark" onclick="selectLinkTemplate('premium-dark')">
-            <div class="template-thumb template-thumb-premium-dark">
-              <span class="thumb-badge">Onyx</span>
-              <div class="thumb-qr"></div>
-            </div>
-            <strong>Premium Dark</strong>
-            <small>Matte titanium with glowing emerald accents</small>
-          </div>
-
-          <!-- Template 4: Modern Gradient -->
-          <div class="template-option-card" data-template="modern-gradient" onclick="selectLinkTemplate('modern-gradient')">
-            <div class="template-thumb template-thumb-modern-gradient">
-              <span class="thumb-badge">Cyber</span>
-              <div class="thumb-qr"></div>
-            </div>
-            <strong>Modern Gradient</strong>
-            <small>Cyberpunk cosmic glassmorphism aura</small>
-          </div>
-
-          <!-- Template 5: Compact UPI -->
-          <div class="template-option-card" data-template="compact-upi" onclick="selectLinkTemplate('compact-upi')">
-            <div class="template-thumb template-thumb-compact-upi">
-              <span class="thumb-badge">1-Tap</span>
-              <div class="thumb-apps"></div>
-            </div>
-            <strong>Compact UPI</strong>
-            <small>Mobile-first 1-tap express app buttons</small>
-          </div>
-        </div>
-        <input type="hidden" id="link-template" value="classic">
       </div>
 
-      <button class="primary submit" type="submit" id="link-submit-btn" style="margin-top:20px">Generate Payment Link &amp; QR →</button>
+      <!-- Sticky Footer -->
+      <div class="builder-modal-footer">
+        <button type="button" class="btn btn-outline" onclick="modal('link-modal', false)">Cancel</button>
+        <button class="primary submit" type="submit" id="link-submit-btn">Generate Payment Link &amp; QR →</button>
+      </div>
     </form>
   </div>
 </div>
@@ -1188,18 +1232,24 @@
 
 <!-- Modal 3: QR Code / Share -->
 <div class="backdrop" id="qr-modal">
-  <div class="modal" style="max-width:440px;text-align:center">
-    <button class="close">×</button>
-    <p class="eyebrow">SHARE PAYMENT LINK</p>
+  <div class="modal payment-link-result-modal" style="max-width:460px;text-align:center">
+    <button class="close" type="button" onclick="modal('qr-modal', false)" aria-label="Close dialog">×</button>
+    <p class="eyebrow">PAYMENT LINK READY</p>
     <h2 id="qr-modal-title">Ready to Receive Payments</h2>
-    <p id="qr-modal-sub" style="margin-bottom:16px">Scan with Google Pay, PhonePe, Paytm, or share the checkout link.</p>
+    <p id="qr-modal-sub" style="margin-bottom:14px">Scan with Google Pay, PhonePe, Paytm, or share the checkout link.</p>
+    
+    <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:14px">
+      <span class="pill success" id="qr-modal-amount-pill"><span class="dot"></span> Ready</span>
+      <span class="pill" id="qr-modal-upi-pill" style="background:rgba(99,102,241,0.16);color:#A5B4FC;border:1px solid rgba(99,102,241,0.3);font-size:11px">Direct UPI: —</span>
+      <span class="pill" id="qr-modal-template-pill" style="background:rgba(255,255,255,0.06);color:var(--muted);border:1px solid var(--line);font-size:11px">Template: Classic</span>
+    </div>
+
     <div style="background:var(--card-inner);border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column;align-items:center;margin-bottom:18px">
       <div id="modal-qrcode" style="background:#FFFFFF;padding:12px;border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,0.4)"></div>
-      <div style="margin-top:12px">
-        <span class="pill success" id="qr-modal-amount-pill"><span class="dot"></span> Ready</span>
-      </div>
-      <button class="btn btn-sm btn-outline" id="modal-download-qr-btn" style="margin-top:12px">⇩ Download QR Code</button>
+      <p style="font-size:11.5px;color:var(--muted);margin:10px 0 0">Scan with any UPI camera or payment application to load checkout</p>
+      <button class="btn btn-sm btn-outline" id="modal-download-qr-btn" style="margin-top:10px">⇩ Download QR Code</button>
     </div>
+
     <div style="text-align:left;margin-bottom:18px">
       <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;display:block;margin-bottom:6px">Shareable Customer Checkout URL</label>
       <div style="display:flex;gap:8px">
@@ -1207,8 +1257,10 @@
         <button class="primary" id="qr-modal-copy-btn" style="padding:9px 14px;font-size:13px;border-radius:8px">Copy Link</button>
       </div>
     </div>
+
     <div style="display:flex;gap:10px;justify-content:center">
       <a id="qr-modal-open-link" target="_blank" class="btn btn-outline" style="flex:1;text-decoration:none;text-align:center;padding:10px 16px">Open Checkout Page ↗</a>
+      <button type="button" class="btn btn-outline" onclick="modal('qr-modal', false)" style="padding:10px 18px">Done</button>
     </div>
   </div>
 </div>

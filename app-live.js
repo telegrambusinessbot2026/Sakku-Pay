@@ -698,13 +698,13 @@ function showQrModal(l) {
       : '<span class="dot"></span> Customer Decides Amount (Open)';
   }
 
-  const amParam = l.amount ? `&am=${encodeURIComponent(l.amount)}` : '';
   const upiId = l.upiId || (upis.find(u => u.default)?.upiId) || (upis[0]?.upiId) || '';
-  const bizName = currentProfile?.businessName || 'SakkuPay Merchant';
-  const upiUri = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(bizName)}${amParam}&cu=INR&tn=${encodeURIComponent(l.name)}`;
+  if ($('#qr-modal-upi-pill')) $('#qr-modal-upi-pill').textContent = 'Direct UPI: ' + (upiId || 'Connected Bank');
+  if ($('#qr-modal-template-pill')) $('#qr-modal-template-pill').textContent = 'Template: ' + (l.template ? (l.template.charAt(0).toUpperCase() + l.template.slice(1)) : 'Classic');
 
   if (window.QRCode) {
-    new QRCode(qrContainer, { text: upiUri, width: 180, height: 180, colorDark: '#111827', colorLight: '#FFFFFF', correctLevel: QRCode.CorrectLevel.H });
+    // Generate QR code directly from the actual payment URL returned by the backend (Phase 5)
+    new QRCode(qrContainer, { text: fullUrl, width: 190, height: 190, colorDark: '#0B0F17', colorLight: '#FFFFFF', correctLevel: QRCode.CorrectLevel.H });
   }
 
   const dlBtn = $('#modal-download-qr-btn');
@@ -1474,12 +1474,14 @@ async function downloadCompanionApk() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'sakkupay-companion-v1.0.apk';
+      const disposition = res.headers.get('content-disposition') || '';
+      const match = disposition.match(/filename="?([^";]+)"?/i);
+      a.download = (match && match[1]) ? match[1].trim() : 'sakkupay.apk';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      toast('🎉 SakkuPay Companion APK downloaded successfully!');
+      toast('🎉 SakkuPay Android APK (sakkupay.apk) downloaded successfully!');
     } else {
       const data = await res.json().catch(() => ({}));
       toast(data.message || 'Companion APK not yet available on server.');

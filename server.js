@@ -1614,6 +1614,7 @@ async function route(req, res) {
   /* ── Companion App Status & Protected APK Download ── */
   if (p === '/api/companion/status') {
     const candidatePaths = [
+      path.join(ROOT, 'downloads/sakkupay.apk'),
       path.join(ROOT, 'companion-android/app/build/outputs/apk/release/app-release.apk'),
       path.join(ROOT, 'downloads/sakkupay-companion.apk')
     ];
@@ -1625,7 +1626,7 @@ async function route(req, res) {
         version: '1.0',
         versionCode: 1,
         packageName: 'in.sakkupay.companion',
-        filename: 'sakkupay-companion-v1.0.apk',
+        filename: 'sakkupay.apk',
         sizeBytes: stat.size,
         sizeFormatted: (stat.size / (1024 * 1024)).toFixed(2) + ' MB'
       });
@@ -1640,7 +1641,7 @@ async function route(req, res) {
     }
   }
 
-  if (p === '/api/companion/download' || p === '/downloads/sakkupay-companion.apk') {
+  if (p === '/api/companion/download' || p === '/downloads/sakkupay.apk' || p === '/downloads/sakkupay-companion.apk') {
     if (method !== 'GET' && method !== 'HEAD') {
       res.writeHead(405, { 'Content-Type': 'application/json', 'Allow': 'GET, HEAD' });
       return res.end(JSON.stringify({ error: 'Method Not Allowed', message: 'Only GET and HEAD requests are permitted.' }));
@@ -1656,6 +1657,7 @@ async function route(req, res) {
     }
 
     const candidatePaths = [
+      path.join(ROOT, 'downloads/sakkupay.apk'),
       path.join(ROOT, 'companion-android/app/build/outputs/apk/release/app-release.apk'),
       path.join(ROOT, 'downloads/sakkupay-companion.apk')
     ];
@@ -1666,7 +1668,7 @@ async function route(req, res) {
       res.writeHead(200, {
         'Content-Type': 'application/vnd.android.package-archive',
         'Content-Length': stat.size,
-        'Content-Disposition': 'attachment; filename="sakkupay-companion-v1.0.apk"',
+        'Content-Disposition': 'attachment; filename="sakkupay.apk"',
         'Cache-Control': 'private, no-cache, no-store, must-revalidate'
       });
       if (method === 'HEAD') {

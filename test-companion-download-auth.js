@@ -62,9 +62,9 @@ async function runTests() {
       assert.strictEqual(data.available, true);
       assert.strictEqual(data.packageName, 'in.sakkupay.companion');
       assert.strictEqual(data.version, '1.0');
-      assert.strictEqual(data.filename, 'sakkupay-companion-v1.0.apk');
+      assert.strictEqual(data.filename, 'sakkupay.apk');
       assert(data.sizeBytes > 1000000, 'Size should be > 1MB');
-      pass('GET /api/companion/status reports available: true, package in.sakkupay.companion, and valid size');
+      pass('GET /api/companion/status reports available: true, package in.sakkupay.companion, filename sakkupay.apk, and valid size');
     }
 
     // Test 2: Unauthenticated download is strictly blocked
@@ -92,28 +92,28 @@ async function runTests() {
       });
       assert.strictEqual(res.status, 200, 'Authenticated download must return HTTP 200');
       assert.strictEqual(res.headers.get('content-type'), 'application/vnd.android.package-archive');
-      assert(res.headers.get('content-disposition').includes('sakkupay-companion-v1.0.apk'));
+      assert(res.headers.get('content-disposition').includes('sakkupay.apk'));
       assert.strictEqual(res.headers.get('cache-control'), 'private, no-cache, no-store, must-revalidate');
 
       const arrayBuf = await res.arrayBuffer();
       const buf = Buffer.from(arrayBuf);
       assert.strictEqual(buf.length, 1734515, 'Buffer size must match exact APK size');
       assert.strictEqual(buf.slice(0, 4).toString('utf8'), 'PK\x03\x04', 'Buffer starts with APK/Zip header PK\\x03\\x04');
-      pass('GET /api/companion/download with valid merchant token serves binary APK with attachment headers');
+      pass('GET /api/companion/download with valid merchant token serves binary APK with attachment filename sakkupay.apk');
     }
 
-    // Test 5: Legacy route /downloads/sakkupay-companion.apk also enforces merchant auth
+    // Test 5: Direct routes /downloads/sakkupay.apk and /downloads/sakkupay-companion.apk enforce merchant auth
     {
-      const resUnauth = await fetch(`${baseUrl}/downloads/sakkupay-companion.apk`);
+      const resUnauth = await fetch(`${baseUrl}/downloads/sakkupay.apk`);
       assert.strictEqual(resUnauth.status, 401);
-      pass('/downloads/sakkupay-companion.apk enforces merchant authentication (HTTP 401 without token)');
+      pass('/downloads/sakkupay.apk enforces merchant authentication (HTTP 401 without token)');
 
-      const resAuth = await fetch(`${baseUrl}/downloads/sakkupay-companion.apk`, {
+      const resAuth = await fetch(`${baseUrl}/downloads/sakkupay.apk`, {
         headers: { 'Authorization': `Bearer ${validMerchantToken}` }
       });
       assert.strictEqual(resAuth.status, 200);
       assert.strictEqual(resAuth.headers.get('content-type'), 'application/vnd.android.package-archive');
-      pass('/downloads/sakkupay-companion.apk serves APK when authenticated with valid token');
+      pass('/downloads/sakkupay.apk serves APK when authenticated with valid token');
     }
 
     // Test 6: HTTP HEAD request delivers valid metadata headers without a body stream
@@ -125,7 +125,7 @@ async function runTests() {
       assert.strictEqual(res.status, 200, 'Authenticated HEAD request must return HTTP 200');
       assert.strictEqual(res.headers.get('content-type'), 'application/vnd.android.package-archive');
       assert.strictEqual(res.headers.get('content-length'), '1734515');
-      assert(res.headers.get('content-disposition').includes('sakkupay-companion-v1.0.apk'));
+      assert(res.headers.get('content-disposition').includes('sakkupay.apk'));
       const text = await res.text();
       assert.strictEqual(text, '', 'HEAD response body must be empty');
       pass('HEAD /api/companion/download delivers accurate headers with empty body');
@@ -144,10 +144,13 @@ async function runTests() {
 
     // Test 8: Missing file returns HTTP 404 when candidate files are absent
     {
-      // Temporarily rename downloads/sakkupay-companion.apk
-      const originalPath = path.join(__dirname, 'downloads/sakkupay-companion.apk');
-      const backupPath = path.join(__dirname, 'downloads/sakkupay-companion.apk.bak');
-      fs.renameSync(originalPath, backupPath);
+      // Temporarily rename both downloads files
+      const p1 = path.join(__dirname, 'downloads/sakkupay.apk');
+      const p1bak = path.join(__dirname, 'downloads/sakkupay.apk.bak');
+      const p2 = path.join(__dirname, 'downloads/sakkupay-companion.apk');
+      const p2bak = path.join(__dirname, 'downloads/sakkupay-companion.apk.bak');
+      if (fs.existsSync(p1)) fs.renameSync(p1, p1bak);
+      if (fs.existsSync(p2)) fs.renameSync(p2, p2bak);
 
       try {
         const res = await fetch(`${baseUrl}/api/companion/download`, {
@@ -158,7 +161,8 @@ async function runTests() {
         assert.strictEqual(data.available, false);
         pass('GET /api/companion/download returns HTTP 404 with available: false when APK missing');
       } finally {
-        fs.renameSync(backupPath, originalPath);
+        if (fs.existsSync(p1bak)) fs.renameSync(p1bak, p1);
+        if (fs.existsSync(p2bak)) fs.renameSync(p2bak, p2);
       }
     }
 

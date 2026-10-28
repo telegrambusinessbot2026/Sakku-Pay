@@ -2670,3 +2670,112 @@ body.checkout-page.template-compact-upi .qr-accordion {
   flex-shrink: 0;
   box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
 }
+
+/* ==============================================================================
+   SakkuPay — Responsive Payment Link Builder Modal (Phase 4 & 10)
+   ============================================================================== */
+.payment-link-builder-modal {
+  width: min(600px, 94vw) !important;
+  max-height: min(88vh, 760px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border-radius: 20px !important;
+  background: #111827 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75), 0 0 30px rgba(99, 102, 241, 0.15) !important;
+}
+
+.builder-modal-header {
+  padding: 22px 26px 18px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: #0E1422 !important;
+  flex-shrink: 0 !important;
+  position: relative !important;
+}
+
+.builder-modal-header h2 {
+  margin: 4px 0 0 !important;
+  font-size: 20px !important;
+  color: #FFFFFF !important;
+}
+
+.builder-modal-header p {
+  margin: 4px 0 0 !important;
+  font-size: 13px !important;
+  color: var(--muted) !important;
+}
+
+.builder-modal-form {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
+.builder-modal-body {
+  padding: 22px 26px !important;
+  overflow-y: auto !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.builder-modal-footer {
+  padding: 16px 26px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: #0E1422 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  flex-shrink: 0 !important;
+}
+
+.builder-modal-footer .btn {
+  padding: 11px 20px !important;
+  font-size: 13.5px !important;
+}
+
+.builder-modal-footer .primary {
+  margin: 0 !important;
+  min-width: 200px !important;
+}
+
+/* Payment Link Result / QR Modal Polish */
+.payment-link-result-modal {
+  width: min(480px, 94vw) !important;
+  max-height: min(90vh, 760px) !important;
+  overflow-y: auto !important;
+  border-radius: 20px !important;
+  background: #111827 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75), 0 0 30px rgba(99, 102, 241, 0.15) !important;
+}
+
+@media (max-width: 640px) {
+  .payment-link-builder-modal {
+    width: 96vw !important;
+    max-height: 94vh !important;
+    border-radius: 16px !important;
+  }
+  .builder-modal-header,
+  .builder-modal-body,
+  .builder-modal-footer {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  .builder-modal-footer {
+    flex-direction: column-reverse !important;
+    gap: 8px !important;
+  }
+  .builder-modal-footer button {
+    width: 100% !important;
+  }
+}
