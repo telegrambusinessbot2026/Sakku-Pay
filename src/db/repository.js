@@ -55,6 +55,7 @@ function createRepository(db = getDatabase()) {
       amount: row.amount != null ? Number(row.amount) : null,
       amount_paise: row.amount_paise != null ? Number(row.amount_paise) : null,
       amountType: row.amountType,
+      template: row.template || 'classic',
       active: Boolean(row.active),
       createdAt: row.createdAt
     };
@@ -223,8 +224,8 @@ function createRepository(db = getDatabase()) {
     linkFindByMerchant: db.prepare('SELECT * FROM links WHERE merchantId = ? ORDER BY createdAt DESC'),
     linkListAll: db.prepare('SELECT * FROM links ORDER BY createdAt DESC'),
     linkInsert: db.prepare(`
-      INSERT INTO links (id, merchantId, upiId, name, description, slug, amount, amount_paise, amountType, active, createdAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO links (id, merchantId, upiId, name, description, slug, amount, amount_paise, amountType, template, active, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         upiId=excluded.upiId,
         name=excluded.name,
@@ -233,6 +234,7 @@ function createRepository(db = getDatabase()) {
         amount=excluded.amount,
         amount_paise=excluded.amount_paise,
         amountType=excluded.amountType,
+        template=excluded.template,
         active=excluded.active
     `),
     linkDelete: db.prepare('DELETE FROM links WHERE id = ?'),
@@ -481,6 +483,7 @@ function createRepository(db = getDatabase()) {
           amount,
           amountPaise,
           link.amountType || (amount != null ? 'fixed' : 'open'),
+          link.template || 'classic',
           link.active !== false ? 1 : 0,
           link.createdAt || new Date().toISOString()
         );
@@ -502,6 +505,7 @@ function createRepository(db = getDatabase()) {
           amount,
           amountPaise,
           merged.amountType,
+          merged.template || 'classic',
           merged.active !== false ? 1 : 0,
           merged.createdAt
         );
@@ -1175,6 +1179,36 @@ function createRepository(db = getDatabase()) {
       findById(id) {
         if (!id) return null;
         return mapAdminAudit(db.prepare('SELECT * FROM admin_audit_trail WHERE id = ?').get(id));
+      }
+    },
+
+    // ── Merchant Support Queries ──────────────────────────────────────────────
+    supportQueries: {
+      create(q) {
+        db.prepare(`
+          INSERT INTO support_queries (id, merchantId, category, subject, message, status, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          q.id,
+          q.merchantId,
+          q.category || 'general',
+          q.subject,
+          q.message,
+          q.status || 'open',
+          q.createdAt || new Date().toISOString()
+        );
+        return this.findById(q.id);
+      },
+      findById(id) {
+        if (!id) return null;
+        return db.prepare('SELECT * FROM support_queries WHERE id = ?').get(id) || null;
+      },
+      findByMerchant(merchantId) {
+        if (!merchantId) return [];
+        return db.prepare('SELECT * FROM support_queries WHERE merchantId = ? ORDER BY createdAt DESC').all(merchantId);
+      },
+      listAll(limit = 100) {
+        return db.prepare('SELECT * FROM support_queries ORDER BY createdAt DESC LIMIT ?').all(limit);
       }
     },
 

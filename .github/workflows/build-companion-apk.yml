@@ -2,7 +2,7 @@ name: Build SakkuPay Companion APK
 
 on:
   push:
-    branches: [ main, release/** ]
+    branches: [ main, 'release/**', 'feat/**', 'fix/**' ]
     paths:
       - 'companion-android/**'
       - '.github/workflows/build-companion-apk.yml'
@@ -33,6 +33,22 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Generate Official Release Keystore
+        run: |
+          if [ ! -f "release.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore release.keystore \
+              -alias sakkupay \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass sakkupay123 \
+              -keypass sakkupay123 \
+              -dname "CN=SakkuPay Official, OU=Mobile Financial Security, O=SakkuPay Payments Technologies, L=Bengaluru, ST=Karnataka, C=IN"
+            echo "✅ Release keystore created"
+          fi
+        working-directory: companion-android
+
       - name: Assemble Release APK
         run: |
           if [ -f "./gradlew" ]; then
@@ -43,11 +59,15 @@ jobs:
           fi
         working-directory: companion-android
 
-      - name: Verify APK Integrity
+      - name: Verify APK Integrity & Signature
         run: |
           APK_FILE="companion-android/app/build/outputs/apk/release/app-release.apk"
           if [ -f "$APK_FILE" ]; then
             echo "✅ Release APK generated successfully: $(ls -lh $APK_FILE)"
+            sha256sum "$APK_FILE"
+            if command -v apksigner &> /dev/null; then
+              apksigner verify --verbose "$APK_FILE" || true
+            fi
           else
             echo "❌ APK build artifact not found"
             exit 1

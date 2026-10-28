@@ -196,14 +196,16 @@ function migrateJsonToSqlite(db, jsonPath = path.join(__dirname, '../../data.jso
     }
 
     // 8. Client Diagnostics / Errors
+    const validMerchantIds = new Set((sourceData.merchants || []).map(m => m.id));
     const insertErr = db.prepare(`
       INSERT INTO errors (id, merchantId, message, stack, url, line, col, createdAt)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const e of (sourceData.errors || [])) {
+      const validMerchantId = (e.merchantId && validMerchantIds.has(e.merchantId)) ? e.merchantId : null;
       insertErr.run(
         e.id,
-        e.merchantId || null,
+        validMerchantId,
         e.message,
         e.stack || null,
         e.url || null,

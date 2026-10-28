@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS links (
   amount REAL,
   amount_paise INTEGER,
   amountType TEXT NOT NULL CHECK(amountType IN ('fixed', 'open')),
+  template TEXT DEFAULT 'classic',
   active INTEGER DEFAULT 1,
   createdAt TEXT NOT NULL
 );
@@ -290,6 +291,34 @@ function applyMigrations(db) {
     db.prepare(`
       INSERT INTO schema_migrations (version, applied_at, name)
       VALUES (3, ?, 'milestone4_admin_rbac_and_audit_trail')
+    `).run(new Date().toISOString());
+  }
+
+  // Migration Version 4: Payment Link Templates & Merchant Support Queries
+  const v4 = db.prepare('SELECT version FROM schema_migrations WHERE version = 4').get();
+  if (!v4) {
+    const linkCols = db.prepare('PRAGMA table_info(links);').all().map(c => c.name);
+    if (!linkCols.includes('template')) {
+      db.exec("ALTER TABLE links ADD COLUMN template TEXT DEFAULT 'classic';");
+    }
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS support_queries (
+        id TEXT PRIMARY KEY,
+        merchantId TEXT NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+        category TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        message TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open',
+        createdAt TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_support_queries_merchant ON support_queries(merchantId);
+      CREATE INDEX IF NOT EXISTS idx_support_queries_created ON support_queries(createdAt);
+    `);
+
+    db.prepare(`
+      INSERT INTO schema_migrations (version, applied_at, name)
+      VALUES (4, ?, 'milestone7_link_templates_and_support_queries')
     `).run(new Date().toISOString());
   }
 }

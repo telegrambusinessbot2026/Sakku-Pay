@@ -418,6 +418,12 @@ function openLinkModal() {
     openUpiModal(null);
     return;
   }
+  const linkSelect = $('#link-upi-select');
+  if (linkSelect) {
+    linkSelect.innerHTML = upis.map(u => `
+      <option value="${u.id}" ${u.default ? 'selected' : ''}>${escapeHtml(u.upiId)} ${u.phoneNumber ? '(+91 ' + escapeHtml(u.phoneNumber) + ')' : ''} ${u.default ? '— [Primary]' : ''}</option>
+    `).join('');
+  }
   const form = $('#link-form');
   if (form) form.reset();
   setLinkPricingType('fixed');
@@ -651,8 +657,8 @@ function renderLinks() {
       return `
         <tr>
           <td>
-            <b>${escapeHtml(l.name)}</b><br>
-            <small class="muted" style="font-family:monospace">${origin}/pay/${escapeHtml(l.slug)}</small>
+            <a href="/pay/${escapeHtml(l.slug)}" target="_blank" rel="noopener noreferrer" style="color:var(--text);text-decoration:none;font-weight:600" onmouseover="this.style.color='#818CF8'" onmouseout="this.style.color='var(--text)'">${escapeHtml(l.name)} ↗</a><br>
+            <a href="/pay/${escapeHtml(l.slug)}" target="_blank" rel="noopener noreferrer" style="color:#818CF8;font-size:12px;font-family:monospace;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${origin}/pay/${escapeHtml(l.slug)}</a>
           </td>
           <td>${templateBadge}</td>
           <td>${l.amountType === 'fixed' ? 'Fixed Price' : 'Customer Decides'}</td>
