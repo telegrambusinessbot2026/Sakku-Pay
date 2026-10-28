@@ -59,8 +59,8 @@ function sanitizeAuditState(state) {
  * Persists an immutable administrative audit event.
  */
 function logAdminAudit(dbOrRepo, entry) {
-  const auditId = `aud_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
-  const now = new Date().toISOString();
+  const auditId = entry.id || `aud_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+  const now = entry.createdAt || new Date().toISOString();
 
   const actorId = String(entry.actorId || 'system').slice(0, 50);
   const actorEmail = String(entry.actorEmail || 'system@sakkupay.local').slice(0, 100);
@@ -78,19 +78,70 @@ function logAdminAudit(dbOrRepo, entry) {
   const afterJson = entry.afterState ? JSON.stringify(sanitizeAuditState(entry.afterState)) : null;
 
   // Insert directly via database connection or repository
-  const db = dbOrRepo.prepare ? dbOrRepo : (dbOrRepo.sqliteDb || dbOrRepo.db);
+  if (dbOrRepo && dbOrRepo.adminAudit && typeof dbOrRepo.adminAudit.create === 'function') {
+    return dbOrRepo.adminAudit.create({
+      id: auditId,
+      actorId,
+      actorEmail,
+      actorRole,
+      action,
+      targetType,
+      targetId,
+      reasonCode,
+      justification,
+      beforeState: entry.beforeState,
+      afterState: entry.afterState,
+      correlationId,
+      ipAddress,
+      outcome,
+      createdAt: now
+    });
+  }
 
-  db.prepare(`
-    INSERT INTO admin_audit_trail (
-      id, actorId, actorEmail, actorRole, action, targetType, targetId,
-      reasonCode, justification, beforeState, afterState,
-      correlationId, ipAddress, outcome, createdAt
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    auditId, actorId, actorEmail, actorRole, action, targetType, targetId,
-    reasonCode, justification, beforeJson, afterJson,
-    correlationId, ipAddress, outcome, now
-  );
+  if (dbOrRepo && typeof dbOrRepo.query === 'function') {
+    return dbOrRepo.query(`
+      INSERT INTO admin_audit_trail (
+        id, "actorId", "actorEmail", "actorRole", action, "targetType", "targetId",
+        "reasonCode", justification, "beforeState", "afterState",
+        "correlationId", "ipAddress", outcome, "createdAt"
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    `, [
+      auditId, actorId, actorEmail, actorRole, action, targetType, targetId,
+      reasonCode, justification, beforeJson, afterJson,
+      correlationId, ipAddress, outcome, now
+    ]).then(() => ({
+      id: auditId,
+      actorId,
+      actorEmail,
+      actorRole,
+      action,
+      targetType,
+      targetId,
+      reasonCode,
+      justification,
+      beforeState: entry.beforeState,
+      afterState: entry.afterState,
+      correlationId,
+      ipAddress,
+      outcome,
+      createdAt: now
+    }));
+  }
+
+  const db = dbOrRepo && (dbOrRepo.prepare ? dbOrRepo : (dbOrRepo.sqliteDb || dbOrRepo.db));
+  if (db && typeof db.prepare === 'function') {
+    db.prepare(`
+      INSERT INTO admin_audit_trail (
+        id, actorId, actorEmail, actorRole, action, targetType, targetId,
+        reasonCode, justification, beforeState, afterState,
+        correlationId, ipAddress, outcome, createdAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      auditId, actorId, actorEmail, actorRole, action, targetType, targetId,
+      reasonCode, justification, beforeJson, afterJson,
+      correlationId, ipAddress, outcome, now
+    );
+  }
 
   return {
     id: auditId,

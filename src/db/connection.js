@@ -96,15 +96,18 @@ function createDatabaseConnection(customPath) {
   // Validate persistence configuration before opening or creating database
   validateDatabaseConfiguration();
 
-  const targetPath = customPath ? path.resolve(customPath) : getResolvedDbPath();
-  const parentDir = path.dirname(targetPath);
+  const isMemory = customPath === ':memory:';
+  const targetPath = isMemory ? ':memory:' : (customPath ? path.resolve(customPath) : getResolvedDbPath());
 
-  if (!fs.existsSync(parentDir)) {
-    try {
-      fs.mkdirSync(parentDir, { recursive: true });
-    } catch (err) {
-      console.error(`[SakkuPay Database] Failed to create database directory ${parentDir}:`, err.message);
-      throw new Error(`Database directory not accessible: ${parentDir}`);
+  if (!isMemory) {
+    const parentDir = path.dirname(targetPath);
+    if (!fs.existsSync(parentDir)) {
+      try {
+        fs.mkdirSync(parentDir, { recursive: true });
+      } catch (err) {
+        console.error(`[SakkuPay Database] Failed to create database directory ${parentDir}:`, err.message);
+        throw new Error(`Database directory not accessible: ${parentDir}`);
+      }
     }
   }
 

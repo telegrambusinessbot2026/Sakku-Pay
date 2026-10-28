@@ -100,7 +100,7 @@ function appendAuditLog(existingLogJson, actionOrEvent, maybeDetails) {
  * Avoids ambiguous auto-confirmation when multiple pending orders match.
  * Detects duplicate UTR replays.
  */
-function reconcileCompanionPayment({
+async function reconcileCompanionPayment({
   repository,
   merchantId,
   amount,
@@ -115,7 +115,7 @@ function reconcileCompanionPayment({
   const eventTime = timestamp && !isNaN(Date.parse(timestamp)) ? new Date(timestamp).toISOString() : new Date().toISOString();
 
   // 1. Check for Duplicate UTR in already settled transactions
-  const settledWithUtr = repository.transactions.findByUtr(merchantId, sanitizedUtr) || (rawUtr ? repository.transactions.findByUtr(merchantId, rawUtr) : null);
+  const settledWithUtr = (await repository.transactions.findByUtr(merchantId, sanitizedUtr)) || (rawUtr ? await repository.transactions.findByUtr(merchantId, rawUtr) : null);
   if (settledWithUtr && settledWithUtr.status === 'success') {
     return {
       success: true,
@@ -128,7 +128,7 @@ function reconcileCompanionPayment({
   }
 
   // 2. Fetch all pending transactions for this merchant
-  const pendingList = repository.transactions.findPendingForCompanion(merchantId);
+  const pendingList = await repository.transactions.findPendingForCompanion(merchantId);
 
   // 3. Attempt match by exact UTR pre-submitted by customer
   const exactUtrMatches = pendingList.filter(t => t.utr && (
@@ -142,7 +142,7 @@ function reconcileCompanionPayment({
     // Verify amount matches candidate order
     if (Math.abs(candidate.amount - parsedAmount) > 0.01) {
       // Conflicting amount for same UTR: Flag for manual review!
-      const updated = repository.transactions.update(candidate.id, {
+      const updated = await repository.transactions.update(candidate.id, {
         reconciliationStatus: RECON_STATUS.FLAGGED_AMBIGUOUS,
         ambiguityReason: `Amount mismatch: expected ₹${candidate.amount}, received ₹${parsedAmount}`,
         auditLog: appendAuditLog(candidate.auditLog, {
@@ -166,7 +166,7 @@ function reconcileCompanionPayment({
     }
 
     // Exact UTR match with matching amount: Safe to confirm
-    const updated = repository.transactions.update(candidate.id, {
+    const updated = await repository.transactions.update(candidate.id, {
       status: 'success',
       utr: sanitizedUtr,
       cashierId: cashierId || candidate.cashierId || null,
@@ -198,7 +198,7 @@ function reconcileCompanionPayment({
   // 4. If multiple pending orders share this exact pre-submitted UTR (suspicious collision):
   if (exactUtrMatches.length > 1) {
     for (const c of exactUtrMatches) {
-      repository.transactions.update(c.id, {
+      await repository.transactions.update(c.id, {
         reconciliationStatus: RECON_STATUS.DUPLICATE_UTR,
         ambiguityReason: `Duplicate UTR ${sanitizedUtr} pre-submitted across multiple orders (${exactUtrMatches.map(x => x.reference).join(', ')})`,
         auditLog: appendAuditLog(c.auditLog, {
@@ -233,7 +233,7 @@ function reconcileCompanionPayment({
   // AMBIGUITY GUARD: If multiple pending orders match this amount, DO NOT CONFIRM!
   if (amountMatches.length > 1) {
     for (const c of amountMatches) {
-      repository.transactions.update(c.id, {
+      await repository.transactions.update(c.id, {
         reconciliationStatus: RECON_STATUS.FLAGGED_AMBIGUOUS,
         ambiguityReason: `Ambiguous match: multiple pending orders (${amountMatches.map(x => x.reference).join(', ')}) with identical amount ₹${parsedAmount}`,
         auditLog: appendAuditLog(c.auditLog, {
@@ -262,7 +262,7 @@ function reconcileCompanionPayment({
   // Exactly 1 qualifying candidate: Safe amount-based match
   if (amountMatches.length === 1) {
     const candidate = amountMatches[0];
-    const updated = repository.transactions.update(candidate.id, {
+    const updated = await repository.transactions.update(candidate.id, {
       status: 'success',
       utr: sanitizedUtr,
       cashierId: cashierId || candidate.cashierId || null,
@@ -321,7 +321,7 @@ function reconcileCompanionPayment({
     })
   };
 
-  const created = repository.transactions.create(directTx);
+  const created = await repository.transactions.create(directTx);
   return {
     success: true,
     verified: true,
@@ -335,7 +335,7 @@ function reconcileCompanionPayment({
  * Reconciles an authoritative webhook from PhonePe or Paytm.
  * Prevents out-of-order stale events from reverting terminal 'success' status.
  */
-function reconcileProviderWebhook({
+async function reconcileProviderWebhook({
   repository,
   tx,
   isSuccess,
@@ -368,7 +368,7 @@ function reconcileProviderWebhook({
         providerReference: providerRef,
         details: `Out-of-order ${provider} failure notification was rejected because transaction is already permanently settled.`
       });
-      const updated = repository.transactions.update(tx.id, { auditLog: updatedLog });
+      const updated = await repository.transactions.update(tx.id, { auditLog: updatedLog });
 
       return {
         success: true,
@@ -391,7 +391,7 @@ function reconcileProviderWebhook({
       providerReference: providerRef,
       details: `Illegal state transition from ${tx.status} to ${targetStatus} rejected.`
     });
-    const updated = repository.transactions.update(tx.id, { auditLog: updatedLog });
+    const updated = await repository.transactions.update(tx.id, { auditLog: updatedLog });
 
     return {
       success: false,
@@ -403,7 +403,7 @@ function reconcileProviderWebhook({
   // 3. Apply state transition
   if (isSuccess) {
     const finalUtr = utr || providerRef || tx.utr || (provider === 'phonepe' ? 'PP' : 'PTM') + crypto.randomBytes(4).toString('hex').toUpperCase();
-    const updated = repository.transactions.update(tx.id, {
+    const updated = await repository.transactions.update(tx.id, {
       status: 'success',
       verifiedBy: `${provider}-direct`,
       providerReference: providerRef || null,
@@ -430,7 +430,7 @@ function reconcileProviderWebhook({
       transaction: updated
     };
   } else {
-    const updated = repository.transactions.update(tx.id, {
+    const updated = await repository.transactions.update(tx.id, {
       status: 'failed',
       verifiedBy: `${provider}-direct`,
       providerReference: providerRef || null,

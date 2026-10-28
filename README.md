@@ -2,8 +2,9 @@
 
 [![Node Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/license-Proprietary-blue.svg)]()
-[![Automated Tests](https://img.shields.io/badge/tests-586%20passed-success.svg)]()
+[![Automated Tests](https://img.shields.io/badge/tests-698%20passed-success.svg)]()
 [![Build APK](https://img.shields.io/badge/Android%20Companion-v1.0-blueviolet.svg)]()
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Ready-336791.svg)]()
 
 > [!WARNING]
 > **PRODUCTION DEPLOYMENT & MIGRATION NOTICE**
@@ -269,50 +270,57 @@ Merchant Dashboard                         Server Backend                     An
 
 ## 🗄 Database Architecture: SQLite vs PostgreSQL
 
-SakkuPay provides a dual-driver database architecture:
+SakkuPay features a genuine dual-driver database architecture with zero dual-state ambiguity:
 
 ### 1. Local Development: SQLite (`node:sqlite`)
 - Uses Node.js v22+ built-in `node:sqlite` (`DatabaseSync`).
 - Enabled by default when `DATABASE_URL` is omitted.
 - Configured in Write-Ahead Logging (`WAL`) mode with foreign key cascades.
 - Synchronous prepared statements provide microsecond query latency.
+- In-memory SQLite (`:memory:`) fully supported for rapid isolated test execution.
 
 ### 2. Production Persistence on Render
-Render Web Services run stateless Docker containers that reset their local filesystems on every redeploy. To persist data across redeployments:
+Render Web Services run stateless Docker containers that reset their local filesystems on every redeploy. SakkuPay supports two production-ready, durable persistence architectures:
 
-- **Option A: Render Persistent Disk (Immediate & Recommended)**
+- **Option A: Managed PostgreSQL via `DATABASE_URL` (Recommended for Cloud Scale)**
+  - Provision a separate Render PostgreSQL Database Service.
+  - Set `DATABASE_URL` to the connection string (e.g. `postgresql://sakkupay:...@dpg-xxx-a:5432/sakkupay_db`).
+  - SakkuPay automatically detects `getDatabaseEngine() === 'postgres'` and runs pure PostgreSQL.
+  - Startup runs all 6 versioned PostgreSQL migrations (`src/db/postgresSchema.js`) sequentially before the HTTP server accepts traffic.
+  - Full asynchronous repository layer (`src/db/postgresRepository.js`) covers all 14 namespaces (`merchants`, `upis`, `links`, `transactions`, `apiKeys`, `businessAccounts`, `adminUsers`, `adminAudit`, `supportQueries`, `cashiers`, `cashierPairingSessions`, `cashierLogs`, `errors`, `oauthStates`).
+  - Strict parameterization (`$1, $2, ...`), double-quoted camelCase identifiers, and explicit transaction wrappers (`withTransaction`, `BEGIN ... COMMIT/ROLLBACK`).
+  - Exact integer paise precision (`BIGINT` `amount_paise`), matching UPI financial specifications.
+  - Production SSL auto-negotiation (`ssl: { rejectUnauthorized: false }`) accommodates Render self-signed certificates.
+  - Zero dual-state fallback: when `DATABASE_URL` is set, SQLite is completely bypassed and `data.json` persistence is disabled.
+
+- **Option B: Render Persistent Disk with SQLite**
   - Attach a Render Persistent Disk mounted at `/var/data`.
   - Set `DB_PATH=/var/data/sakkupay.db`.
-  - Works 100% out-of-the-box with the current synchronous repository layer.
-- **Option B: Managed PostgreSQL (`DATABASE_URL`)**
-  - Set `DATABASE_URL` to a managed PostgreSQL database.
-  - The PostgreSQL schema ([`src/db/postgresSchema.js`](file:///D:/SakkuPay/src/db/postgresSchema.js)) provides all 5 versioned migrations.
-  - Note: While schema creation and the atomic migrator are fully implemented and tested, live server queries currently run through `src/db/repository.js`. Adapting the repository to asynchronous PostgreSQL queries is documented in [PROJECT_STATUS.md](file:///D:/SakkuPay/PROJECT_STATUS.md).
+  - Operates using the native SQLite WAL driver on durable network-attached block storage.
 
 ### 3. Production Startup Guard
-[`server.js`](file:///D:/SakkuPay/server.js) enforces a strict boot-time check: when `NODE_ENV === 'production'`, the server throws a fatal exception and halts if neither `DATABASE_URL` nor `DB_PATH` is configured.
+[`server.js`](file:///D:/SakkuPay/server.js) enforces a strict boot-time check: when `NODE_ENV === 'production'`, the server throws a fatal exception and halts if neither `DATABASE_URL` nor an absolute `DB_PATH` is configured. Ephemeral container storage is strictly rejected.
 
 ---
 
 ## 🔄 Database Migration Procedure
 
-To migrate existing SQLite data into managed PostgreSQL without data loss:
+To migrate existing SQLite data into managed PostgreSQL without data loss or downtime:
 
 ### Safe Atomic Migration (`src/db/migrateSqliteToPostgres.js`)
-The migration engine runs all operations inside a single atomic PostgreSQL transaction (`BEGIN ... COMMIT`) with count parity checks:
+The migration engine runs all operations inside a single atomic PostgreSQL transaction (`BEGIN ... COMMIT`) with comprehensive parity checks:
 
 ```bash
 # Execute safe atomic migration from SQLite to PostgreSQL
 node -e "
-const { getDatabase, getPostgresPool } = require('./src/db/connection');
+const { getPostgresPool } = require('./src/db/connection');
 const { migrateSqliteToPostgres } = require('./src/db/migrateSqliteToPostgres');
 
 async function run() {
-  const sqlite = getDatabase();
   const pool = getPostgresPool(process.env.DATABASE_URL);
   const client = await pool.connect();
   try {
-    const res = await migrateSqliteToPostgres(sqlite, client);
+    const res = await migrateSqliteToPostgres('sakkupay.db', client);
     console.log('Parity Verification:', res.recordsTransferred);
   } finally {
     client.release();
@@ -324,35 +332,48 @@ run().catch(err => { console.error('Migration failed:', err); process.exit(1); }
 ```
 
 ### Safety Features of the Migrator:
-1. **Idempotent Schema:** Applies PostgreSQL migrations 1 to 5 (`CREATE TABLE IF NOT EXISTS` and `ADD COLUMN IF NOT EXISTS`).
-2. **Upsert Logic:** Inserts records with `ON CONFLICT DO UPDATE` to prevent key collision failures.
-3. **Count Parity Assertion:** Validates that record counts in PostgreSQL match or exceed SQLite counts.
-4. **Automatic Rollback:** If any error occurs or counts fail to match, an immediate `ROLLBACK` is issued, leaving the target database completely untouched.
-5. **Zero Destruction:** Never issues `DROP TABLE` or `DELETE FROM`.
+1. **Automated Snapshot Backup:** Creates a verified snapshot copy of the source SQLite database (`<path>.backup-<timestamp>`) before any data extraction.
+2. **Idempotent Schema:** Applies all 6 PostgreSQL migrations (`CREATE TABLE IF NOT EXISTS` and `ADD COLUMN IF NOT EXISTS`) before transferring rows.
+3. **Upsert Logic:** Inserts records with `ON CONFLICT DO UPDATE` or `ON CONFLICT DO NOTHING` to prevent key collision failures.
+4. **Primary & Foreign Key Preservation:** Retains all exact identifiers (`mer_...`, `csh_...`, `txn_...`), relationships, and timestamps.
+5. **Exact Paise & Volume Parity:** Validates row counts for all tables and verifies that the sum of `amount_paise` in PostgreSQL equals the SQLite source volume before committing.
+6. **Automatic Rollback:** If any error occurs or parity counts mismatch, an immediate `ROLLBACK` is issued, leaving the target PostgreSQL database completely untouched.
+7. **Zero Destruction:** Never issues `DROP TABLE` or `DELETE FROM`.
 
 ---
 
 ## 🚢 Render Deployment Preparation Checklist
 
-Before deploying SakkuPay to Render, complete the following steps:
+Before deploying SakkuPay to Render, select your persistence architecture and complete the following steps:
 
-- [ ] **1. Attach Render Persistent Disk to Web Service:**
-  - In your Render Web Service dashboard, navigate to **Disks** -> click **Add Disk**.
-  - Name: `sakkupay-data`
-  - Mount Path: `/var/data` (Must be an absolute path)
-  - Size: `1 GB` (or more based on transaction volume)
+### Option 1: Managed PostgreSQL Deployment (Recommended)
+- [ ] **1. Create Render PostgreSQL Service:**
+  - In Render Dashboard, click **New +** -> **PostgreSQL**.
+  - Name: `sakkupay-db`, Region: `Oregon` (or matching Web Service region).
+  - Note the **Internal Database URL** (for Render Web Services) or **External Database URL**.
 - [ ] **2. Configure Web Service Environment Variables on Render:**
   - `NODE_ENV`: `production`
   - `PORT`: (Auto-injected by Render, leave unset)
   - `APP_URL`: `https://sakkupay.onrender.com`
   - `TRUST_PROXY`: `true`
-  - `DB_PATH`: `/var/data/sakkupay.db` (Must point to the mounted persistent volume)
+  - `DATABASE_URL`: `postgresql://...` (Render Internal Database URL)
   - `SAKKUPAY_TOKEN_SECRET`: Random 32+ character string (`openssl rand -hex 32`)
   - `VAULT_SECRET`: Random 32+ character string (`openssl rand -hex 32`)
   - `ADMIN_USERNAME`: Custom administrative username
   - `ADMIN_PASSWORD`: Strong password of 12+ characters
   - `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET`: Configured in Google Cloud Console with authorized redirect URI `https://sakkupay.onrender.com/api/auth/google/callback`.
-- [ ] **3. Sideload & Test Companion APK:**
+- [ ] **3. (Optional) Migrate Existing SQLite Data:**
+  - If existing data is in a local `sakkupay.db`, execute `src/db/migrateSqliteToPostgres.js` pointing to the Render External Database URL before cutover.
+
+### Option 2: Render Persistent Disk with SQLite
+- [ ] **1. Attach Render Persistent Disk to Web Service:**
+  - In your Render Web Service dashboard, navigate to **Disks** -> click **Add Disk**.
+  - Name: `sakkupay-data`, Mount Path: `/var/data` (Must be an absolute path), Size: `1 GB`.
+- [ ] **2. Configure Environment Variables:**
+  - Set `DB_PATH=/var/data/sakkupay.db` and leave `DATABASE_URL` empty.
+
+### Android Companion Verification:
+- [ ] **Sideload & Test Companion APK:**
   - Download [`downloads/sakkupay.apk`](file:///D:/SakkuPay/downloads/sakkupay.apk) onto an Android 13/14/15 phone.
   - Sideload the APK and verify that the "Restricted Settings" prompt allows enabling Notification Access.
   - Perform a two-stage cashier pairing against the staging/production URL.

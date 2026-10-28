@@ -6,9 +6,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const { getDatabase, validateDatabaseConfiguration } = require('./src/db/connection');
+const { getDatabase, getDatabaseEngine, validateDatabaseConfiguration, getPostgresPool } = require('./src/db/connection');
+const { applyPostgresMigrations } = require('./src/db/postgresSchema');
 const { migrateJsonToSqlite } = require('./src/db/migrate');
-const { getRepository } = require('./src/db/repository');
+const { getRepository, createPostgresRepository } = require('./src/db/repository');
 const {
   VALID_TRANSITIONS,
   RECON_STATUS,
@@ -50,15 +51,25 @@ const mime = {
 
 // Validate database persistence configuration before opening database
 validateDatabaseConfiguration();
+const engine = getDatabaseEngine();
 
-const sqliteDb = getDatabase();
-// Atomic, repeatable migration from data.json to SQLite on server boot
-migrateJsonToSqlite(sqliteDb, STORE);
-const repository = getRepository(sqliteDb);
+let sqliteDb = null;
+let repository = null;
+let db = { adminSessions: [], merchants: [], upis: [], links: [], transactions: [], apiKeys: [], businessAccounts: [], errors: [], oauthStates: [] };
 
-// Populate legacy snapshot for backwards compatibility with tests and callers
-let db = repository.getLegacyDbSnapshot();
-db.adminSessions ||= [];
+if (engine === 'postgres') {
+  const pool = getPostgresPool();
+  repository = createPostgresRepository(pool);
+} else {
+  sqliteDb = getDatabase();
+  migrateJsonToSqlite(sqliteDb, STORE);
+  repository = getRepository(sqliteDb);
+  try {
+    const snap = repository.getLegacyDbSnapshot();
+    if (snap) db = snap;
+  } catch (_) {}
+  db.adminSessions ||= [];
+}
 
 const eventClients = new Map();
 
@@ -143,6 +154,7 @@ function maskSecret(str) {
 }
 
 function persist() {
+  if (engine === 'postgres') return;
   try {
     // 1. Sync legacy db in-memory objects to SQLite
     repository.syncFromLegacy(db);
@@ -198,9 +210,9 @@ const secret = process.env.SAKKUPAY_TOKEN_SECRET || 'development-only-change-thi
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme123';
 
-// Seed default SuperAdmin user if none exists
+// Seed default SuperAdmin user if none exists (in SQLite mode; PostgreSQL seeds in initDatabase)
 try {
-  if (repository.adminUsers && repository.adminUsers.count() === 0) {
+  if (engine !== 'postgres' && repository.adminUsers && repository.adminUsers.count() === 0) {
     repository.adminUsers.create({
       id: 'adm_default_superadmin',
       email: (process.env.ADMIN_EMAIL || `${ADMIN_USERNAME}@sakkupay.local`).toLowerCase(),
@@ -260,7 +272,7 @@ function _verifyToken(raw) {
     return null;
   }
 }
-function auth(req) {
+async function auth(req) {
   let value = req.headers.authorization || '';
   if (!value) {
     try {
@@ -276,9 +288,9 @@ function auth(req) {
   let raw = value.replace(/^Bearer\s+/i, '').trim();
   let data = _verifyToken(raw);
   if (!data || data.role === 'admin' || isValidRole(data.role)) return null;
-  return repository.merchants.findById(data.sub) || (db.merchants && db.merchants.find(m => m.id === data.sub)) || null;
+  return (await repository.merchants.findById(data.sub)) || (db.merchants && db.merchants.find(m => m.id === data.sub)) || null;
 }
-function authAdmin(req, requiredPermission = null) {
+async function authAdmin(req, requiredPermission = null) {
   // Security Hardening: Admin tokens are strictly rejected via URL query strings (CWE-598).
   // Admin requests must provide Authorization: Bearer <token>.
   let value = req.headers.authorization || '';
@@ -293,7 +305,7 @@ function authAdmin(req, requiredPermission = null) {
 
   // Deny-by-default: if user exists in database, verify they are still active
   if (data.sub && data.sub !== 'admin' && data.sub !== 'adm_env_superadmin') {
-    const userInDb = repository.adminUsers.findById(data.sub);
+    const userInDb = await repository.adminUsers.findById(data.sub);
     if (userInDb && !userInDb.active) {
       return { denied: true, deactivated: true, role, permission: requiredPermission };
     }
@@ -313,8 +325,8 @@ function authAdmin(req, requiredPermission = null) {
   };
 }
 
-function requireAdmin(req, res, requiredPermission = null) {
-  const auth = authAdmin(req, requiredPermission);
+async function requireAdmin(req, res, requiredPermission = null) {
+  const auth = await authAdmin(req, requiredPermission);
   if (!auth) {
     json(res, 401, { error: 'Admin auth required' });
     return null;
@@ -341,21 +353,21 @@ function merchantSafe(m) {
     createdAt: m.createdAt
   };
 }
-function required(req, res) {
-  let m = auth(req);
+async function required(req, res) {
+  let m = await auth(req);
   if (!m) { json(res, 401, { error: 'Authentication required' }); return null; }
   if (m.suspended) { json(res, 403, { error: 'Account suspended. Contact support.' }); return null; }
   return m;
 }
-function own(collection, merchant, id) {
+async function own(collection, merchant, id) {
   if (collection === 'upis') {
-    const item = repository.upis.findById(id);
+    const item = await repository.upis.findById(id);
     if (item && item.merchantId === merchant.id) return item;
   } else if (collection === 'links') {
-    const item = repository.links.findById(id);
+    const item = await repository.links.findById(id);
     if (item && item.merchantId === merchant.id) return item;
   } else if (collection === 'transactions') {
-    const item = repository.transactions.findById(id);
+    const item = await repository.transactions.findById(id);
     if (item && item.merchantId === merchant.id) return item;
   }
   return db[collection]?.find(x => x.id === id && x.merchantId === merchant.id) || null;
@@ -363,9 +375,9 @@ function own(collection, merchant, id) {
 function slugify(value) {
   return String(value || 'payment').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 45) || 'payment';
 }
-function uniqueSlug(value) {
+async function uniqueSlug(value) {
   let base = slugify(value), slug = base, i = 1;
-  while (repository.links.slugExists(slug) || (db.links && db.links.some(l => l.slug === slug))) {
+  while ((await repository.links.slugExists(slug)) || (db.links && db.links.some(l => l.slug === slug))) {
     slug = `${base}-${i++}`;
   }
   return slug;
@@ -376,11 +388,11 @@ function publish(merchantId, event, data) {
   let frame = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const res of clients) res.write(frame);
 }
-function publicLink(link) {
-  let m = repository.merchants.findById(link.merchantId) || (db.merchants && db.merchants.find(x => x.id === link.merchantId));
+async function publicLink(link) {
+  let m = (await repository.merchants.findById(link.merchantId)) || (db.merchants && db.merchants.find(x => x.id === link.merchantId));
   let upiVpa = link.upiId;
   if (upiVpa && upiVpa.startsWith('upi_')) {
-    const u = repository.upis.findById(upiVpa) || (db.upis && db.upis.find(x => x.id === upiVpa));
+    const u = (await repository.upis.findById(upiVpa)) || (db.upis && db.upis.find(x => x.id === upiVpa));
     if (u?.upiId) upiVpa = u.upiId;
   }
   return {
@@ -534,7 +546,7 @@ async function route(req, res) {
     let pw = String(b.password || '');
 
     // Check database admin users first
-    let adminUser = repository.adminUsers.findByEmail(u);
+    let adminUser = await repository.adminUsers.findByEmail(u);
     let authSuccess = false;
     let matchedUser = null;
 
@@ -542,7 +554,7 @@ async function route(req, res) {
       if (adminUser.active && verifyPassword(pw, adminUser.passwordHash)) {
         authSuccess = true;
         matchedUser = adminUser;
-        repository.adminUsers.update(adminUser.id, { lastLoginAt: new Date().toISOString() });
+        await repository.adminUsers.update(adminUser.id, { lastLoginAt: new Date().toISOString() });
       }
     }
 
@@ -566,7 +578,7 @@ async function route(req, res) {
     if (!authSuccess) {
       recordFailedAdminLogin(clientIp);
       try {
-        logAdminAudit(sqliteDb, {
+        await logAdminAudit(repository, {
           actorId: 'anonymous',
           actorEmail: u || 'unknown',
           actorRole: 'Unauthenticated',
@@ -590,7 +602,7 @@ async function route(req, res) {
     });
 
     try {
-      logAdminAudit(sqliteDb, {
+      await logAdminAudit(repository, {
         actorId: matchedUser.id,
         actorEmail: matchedUser.email,
         actorRole: matchedUser.role,
@@ -612,9 +624,9 @@ async function route(req, res) {
 
   /* ── Admin stats ── */
   if (method === 'GET' && p === '/api/admin/stats') {
-    const adm = requireAdmin(req, res, 'system.health.read');
+    const adm = await requireAdmin(req, res, 'system.health.read');
     if (!adm) return;
-    const metrics = repository.transactions.getGlobalMetrics();
+    const metrics = await repository.transactions.getGlobalMetrics();
     return json(res, 200, {
       totalMerchants: metrics.totalMerchants,
       activeMerchants: metrics.activeMerchants,
@@ -632,16 +644,16 @@ async function route(req, res) {
   /* ── Admin staff users management (SuperAdmin only) ── */
   if (p === '/api/admin/staff') {
     if (method === 'GET') {
-      const adm = requireAdmin(req, res, 'admin.users.read');
+      const adm = await requireAdmin(req, res, 'admin.users.read');
       if (!adm) return;
       const role = url.searchParams.get('role');
       const activeParam = url.searchParams.get('active');
       const active = activeParam !== null ? (activeParam === 'true' || activeParam === '1') : undefined;
-      const list = repository.adminUsers.listAll({ role, active }).map(({ passwordHash, ...u }) => u);
+      const list = (await repository.adminUsers.listAll({ role, active })).map(({ passwordHash, ...u }) => u);
       return json(res, 200, list);
     }
     if (method === 'POST') {
-      const adm = requireAdmin(req, res, 'admin.users.write');
+      const adm = await requireAdmin(req, res, 'admin.users.write');
       if (!adm) return;
       const b = await read(req);
       const email = String(b.email || '').toLowerCase().trim();
@@ -654,10 +666,10 @@ async function route(req, res) {
       if (!password || password.length < 8) return json(res, 400, { error: 'Password must be at least 8 characters' });
       if (!isValidRole(role)) return json(res, 400, { error: `Invalid role. Allowed: ${Object.values(ADMIN_ROLES).join(', ')}` });
 
-      const existing = repository.adminUsers.findByEmail(email);
+      const existing = await repository.adminUsers.findByEmail(email);
       if (existing) return json(res, 409, { error: 'Admin user with this email already exists' });
 
-      const user = repository.adminUsers.create({
+      const user = await repository.adminUsers.create({
         email,
         name,
         passwordHash: hashPassword(password),
@@ -665,7 +677,7 @@ async function route(req, res) {
         active: b.active !== false
       });
 
-      logAdminAudit(sqliteDb, {
+      await logAdminAudit(repository, {
         actorId: adm.actorId,
         actorEmail: adm.actorEmail,
         actorRole: adm.actorRole,
@@ -688,9 +700,9 @@ async function route(req, res) {
   if (p.startsWith('/api/admin/staff/')) {
     const staffId = p.slice(17);
     if (method === 'PATCH') {
-      const adm = requireAdmin(req, res, 'admin.users.write');
+      const adm = await requireAdmin(req, res, 'admin.users.write');
       if (!adm) return;
-      const target = repository.adminUsers.findById(staffId);
+      const target = await repository.adminUsers.findById(staffId);
       if (!target) return json(res, 404, { error: 'Admin staff user not found' });
 
       const b = await read(req);
@@ -721,9 +733,9 @@ async function route(req, res) {
         partial.passwordHash = hashPassword(b.password);
       }
 
-      const updated = repository.adminUsers.update(target.id, partial);
+      const updated = await repository.adminUsers.update(target.id, partial);
 
-      logAdminAudit(sqliteDb, {
+      await logAdminAudit(repository, {
         actorId: adm.actorId,
         actorEmail: adm.actorEmail,
         actorRole: adm.actorRole,
@@ -743,17 +755,17 @@ async function route(req, res) {
     }
 
     if (method === 'DELETE') {
-      const adm = requireAdmin(req, res, 'admin.users.write');
+      const adm = await requireAdmin(req, res, 'admin.users.write');
       if (!adm) return;
       if (staffId === adm.actorId) {
         return json(res, 400, { error: 'Admins cannot delete their own account' });
       }
-      const target = repository.adminUsers.findById(staffId);
+      const target = await repository.adminUsers.findById(staffId);
       if (!target) return json(res, 404, { error: 'Admin staff user not found' });
 
-      repository.adminUsers.delete(staffId);
+      await repository.adminUsers.delete(staffId);
 
-      logAdminAudit(sqliteDb, {
+      await logAdminAudit(repository, {
         actorId: adm.actorId,
         actorEmail: adm.actorEmail,
         actorRole: adm.actorRole,
@@ -774,7 +786,7 @@ async function route(req, res) {
 
   /* ── Admin audit trail API (SuperAdmin & ComplianceAuditor) ── */
   if (method === 'GET' && (p === '/api/admin/audit-trail' || p === '/api/admin/audit-logs')) {
-    const adm = requireAdmin(req, res, 'audit.read');
+    const adm = await requireAdmin(req, res, 'audit.read');
     if (!adm) return;
     const actorId = url.searchParams.get('actorId') || undefined;
     const action = url.searchParams.get('action') || undefined;
@@ -787,17 +799,17 @@ async function route(req, res) {
     const limit = Math.min(Number(url.searchParams.get('limit')) || 50, 200);
     const offset = Math.max(Number(url.searchParams.get('offset')) || 0, 0);
 
-    const items = repository.adminAudit.list({
+    const items = await repository.adminAudit.list({
       actorId, action, targetType, targetId, reasonCode, outcome, start, end, limit, offset
     });
-    const total = repository.adminAudit.count({ actorId, action, targetType, targetId });
+    const total = await repository.adminAudit.count({ actorId, action, targetType, targetId });
 
     return json(res, 200, { total, limit, offset, items });
   }
 
   /* ── Payment investigation workspace APIs (Task 3) ── */
   if (method === 'GET' && p === '/api/admin/investigation/search') {
-    const adm = requireAdmin(req, res, 'transactions.investigate');
+    const adm = await requireAdmin(req, res, 'transactions.investigate');
     if (!adm) return;
 
     const q = url.searchParams.get('q') || undefined;
@@ -811,7 +823,7 @@ async function route(req, res) {
     const limit = Math.min(Number(url.searchParams.get('limit')) || 50, 100);
     const offset = Math.max(Number(url.searchParams.get('offset')) || 0, 0);
 
-    const result = repository.transactions.search({
+    const result = await repository.transactions.search({
       q, utr, providerReference, merchantId, status, reconciliationStatus, start, end, limit, offset
     });
 
@@ -819,12 +831,12 @@ async function route(req, res) {
   }
 
   if (method === 'GET' && p.startsWith('/api/admin/transactions/') && (p.endsWith('/timeline') || p.endsWith('/investigation'))) {
-    const adm = requireAdmin(req, res, 'transactions.investigate');
+    const adm = await requireAdmin(req, res, 'transactions.investigate');
     if (!adm) return;
 
     const isTimeline = p.endsWith('/timeline');
     const tid = isTimeline ? p.slice(24, -9) : p.slice(24, -14);
-    const investigation = repository.transactions.getInvestigation(tid);
+    const investigation = await repository.transactions.getInvestigation(tid);
     if (!investigation) return json(res, 404, { error: 'Transaction not found' });
 
     return json(res, 200, investigation);
@@ -832,11 +844,11 @@ async function route(req, res) {
 
   /* ── Safe manual reconciliation (Task 4) ── */
   if (method === 'POST' && p.startsWith('/api/admin/transactions/') && p.endsWith('/reconcile')) {
-    const adm = requireAdmin(req, res, 'transactions.reconcile');
+    const adm = await requireAdmin(req, res, 'transactions.reconcile');
     if (!adm) return;
 
     const tid = p.slice(24, -10);
-    const tx = repository.transactions.findById(tid);
+    const tx = await repository.transactions.findById(tid);
     if (!tx) return json(res, 404, { error: 'Transaction not found' });
 
     const b = await read(req);
@@ -859,7 +871,7 @@ async function route(req, res) {
 
     // Optimistic Concurrency Check
     if (expectedCurrentStatus && tx.status !== expectedCurrentStatus) {
-      logAdminAudit(sqliteDb, {
+      await logAdminAudit(repository, {
         actorId: adm.actorId,
         actorEmail: adm.actorEmail,
         actorRole: adm.actorRole,
@@ -968,14 +980,14 @@ async function route(req, res) {
       providerReference: partialUpdate.providerReference || tx.providerReference
     });
 
-    const updatedTx = repository.transactions.update(tx.id, partialUpdate);
+    const updatedTx = await repository.transactions.update(tx.id, partialUpdate);
     const inMem = db.transactions.find(t => t.id === tx.id);
     if (inMem) Object.assign(inMem, updatedTx);
     persist();
     publish(tx.merchantId, 'transaction.updated', updatedTx);
 
     // Record in dedicated immutable admin audit trail
-    const auditRecord = logAdminAudit(sqliteDb, {
+    const auditRecord = await logAdminAudit(repository, {
       actorId: adm.actorId,
       actorEmail: adm.actorEmail,
       actorRole: adm.actorRole,
@@ -1001,12 +1013,12 @@ async function route(req, res) {
   /* ── Admin merchants paginated search & detail (Task 5) ── */
   if (p === '/api/admin/merchants') {
     if (method === 'GET') {
-      const adm = requireAdmin(req, res, 'merchants.read');
+      const adm = await requireAdmin(req, res, 'merchants.read');
       if (!adm) return;
 
       const q = (url.searchParams.get('q') || '').toLowerCase();
       const suspended = url.searchParams.get('suspended');
-      let list = repository.merchants.listAll({ query: q });
+      let list = await repository.merchants.listAll({ query: q });
       if (suspended !== null && suspended !== undefined) {
         const isSusp = suspended === 'true' || suspended === '1';
         list = list.filter(m => Boolean(m.suspended) === isSusp);
@@ -1020,11 +1032,11 @@ async function route(req, res) {
         total,
         limit,
         offset,
-        items: list.map(m => {
-          const mUpis = repository.upis.findByMerchant(m.id);
+        items: await Promise.all(list.map(async m => {
+          const mUpis = await repository.upis.findByMerchant(m.id);
           const defaultUpi = mUpis.find(x => x.default) || mUpis[0];
-          const mLinks = repository.links.findByMerchant(m.id);
-          const mTx = repository.transactions.findByMerchant(m.id);
+          const mLinks = await repository.links.findByMerchant(m.id);
+          const mTx = await repository.transactions.findByMerchant(m.id);
           const mSuccess = mTx.filter(x => x.status === 'success');
           return {
             ...merchantSafe(m),
@@ -1036,7 +1048,7 @@ async function route(req, res) {
             totalVolume: mSuccess.reduce((s, x) => s + x.amount, 0),
             createdAt: m.createdAt
           };
-        })
+        }))
       });
     }
   }
@@ -1046,14 +1058,14 @@ async function route(req, res) {
     if (!sub.includes('/')) {
       // GET /api/admin/merchants/:id
       if (method === 'GET') {
-        const adm = requireAdmin(req, res, 'merchants.read');
+        const adm = await requireAdmin(req, res, 'merchants.read');
         if (!adm) return;
-        const m = repository.merchants.findById(sub);
+        const m = await repository.merchants.findById(sub);
         if (!m) return json(res, 404, { error: 'Merchant not found' });
-        const upis = repository.upis.findByMerchant(m.id);
-        const links = repository.links.findByMerchant(m.id);
-        const txs = repository.transactions.findByMerchant(m.id, { limit: 20 });
-        const bizAccounts = (repository.businessAccounts.findByMerchant(m.id) || []).map(b => ({
+        const upis = await repository.upis.findByMerchant(m.id);
+        const links = await repository.links.findByMerchant(m.id);
+        const txs = await repository.transactions.findByMerchant(m.id, { limit: 20 });
+        const bizAccounts = ((await repository.businessAccounts.findByMerchant(m.id)) || []).map(b => ({
           id: b.id,
           provider: b.provider,
           accountName: b.accountName,
@@ -1075,10 +1087,10 @@ async function route(req, res) {
       }
     } else if (sub.endsWith('/suspend') && method === 'POST') {
       // POST /api/admin/merchants/:id/suspend
-      const adm = requireAdmin(req, res, 'merchants.write');
+      const adm = await requireAdmin(req, res, 'merchants.write');
       if (!adm) return;
       const mid = sub.slice(0, -8);
-      const m = repository.merchants.findById(mid);
+      const m = await repository.merchants.findById(mid);
       if (!m) return json(res, 404, { error: 'Merchant not found' });
 
       const b = await read(req);
@@ -1088,12 +1100,12 @@ async function route(req, res) {
       const reasonCode = String(b.reasonCode || 'MERCHANT_STATUS_UPDATE').trim();
       const justification = String(b.justification || 'Merchant suspension toggled by administrator').trim();
 
-      const updated = repository.merchants.update(m.id, { suspended: b.suspended });
+      const updated = await repository.merchants.update(m.id, { suspended: b.suspended });
       const inMem = db.merchants.find(x => x.id === m.id);
       if (inMem) inMem.suspended = b.suspended;
       persist();
 
-      logAdminAudit(sqliteDb, {
+      await logAdminAudit(repository, {
         actorId: adm.actorId,
         actorEmail: adm.actorEmail,
         actorRole: adm.actorRole,
@@ -1114,16 +1126,16 @@ async function route(req, res) {
 
   /* ── Admin users (legacy endpoint for merchants) ── */
   if (method === 'GET' && p === '/api/admin/users') {
-    const adm = requireAdmin(req, res, 'merchants.read');
+    const adm = await requireAdmin(req, res, 'merchants.read');
     if (!adm) return;
     let q = (url.searchParams.get('q') || '').toLowerCase();
-    let list = repository.merchants.listAll({ query: q });
-    return json(res, 200, list.map(m => {
-      const mUpis = repository.upis.findByMerchant(m.id);
+    let list = await repository.merchants.listAll({ query: q });
+    return json(res, 200, await Promise.all(list.map(async m => {
+      const mUpis = await repository.upis.findByMerchant(m.id);
       const defaultUpi = mUpis.find(x => x.default) || mUpis[0];
       const phone = defaultUpi?.phoneNumber || m.whatsappNumber || '';
-      const mLinks = repository.links.findByMerchant(m.id);
-      const mTx = repository.transactions.findByMerchant(m.id);
+      const mLinks = await repository.links.findByMerchant(m.id);
+      const mTx = await repository.transactions.findByMerchant(m.id);
       const mSuccess = mTx.filter(x => x.status === 'success');
       return {
         ...merchantSafe(m),
@@ -1137,25 +1149,25 @@ async function route(req, res) {
         txCount: mTx.length,
         txVolume: mSuccess.reduce((s, x) => s + x.amount, 0)
       };
-    }));
+    })));
   }
 
   /* ── Admin patch user (legacy endpoint for merchant suspension) ── */
   if (method === 'PATCH' && p.startsWith('/api/admin/users/')) {
-    const adm = requireAdmin(req, res, 'merchants.write');
+    const adm = await requireAdmin(req, res, 'merchants.write');
     if (!adm) return;
-    let uid = p.slice(17), m = repository.merchants.findById(uid);
+    let uid = p.slice(17), m = await repository.merchants.findById(uid);
     if (!m) return json(res, 404, { error: 'Merchant not found' });
     let b = await read(req);
     if (typeof b.suspended === 'boolean') {
       const reasonCode = String(b.reasonCode || 'MERCHANT_STATUS_UPDATE').trim();
       const justification = String(b.justification || 'Merchant suspension toggled by administrator').trim();
 
-      m = repository.merchants.update(uid, { suspended: b.suspended });
+      m = await repository.merchants.update(uid, { suspended: b.suspended });
       const inMem = db.merchants.find(x => x.id === uid);
       if (inMem) inMem.suspended = b.suspended;
 
-      logAdminAudit(sqliteDb, {
+      await logAdminAudit(repository, {
         actorId: adm.actorId,
         actorEmail: adm.actorEmail,
         actorRole: adm.actorRole,
@@ -1176,20 +1188,20 @@ async function route(req, res) {
 
   /* ── Admin delete user (Task 5 Guard: Never delete merchants with financial records) ── */
   if (method === 'DELETE' && p.startsWith('/api/admin/users/')) {
-    const adm = requireAdmin(req, res, 'merchants.write');
+    const adm = await requireAdmin(req, res, 'merchants.write');
     if (!adm) return;
-    let uid = p.slice(17), m = repository.merchants.findById(uid);
+    let uid = p.slice(17), m = await repository.merchants.findById(uid);
     if (!m) return json(res, 404, { error: 'Merchant not found' });
 
     // Financial Data Protection: Do not permanently delete merchants with financial records
-    const txCount = repository.transactions.findByMerchant(uid).length;
+    const txCount = (await repository.transactions.findByMerchant(uid)).length;
     if (txCount > 0) {
       return json(res, 400, {
         error: `Cannot permanently delete merchant with ${txCount} existing financial transaction records. Suspend merchant instead.`
       });
     }
 
-    repository.merchants.delete(uid);
+    await repository.merchants.delete(uid);
     db.merchants = db.merchants.filter(x => x.id !== uid);
     db.upis = db.upis.filter(x => x.merchantId !== uid);
     db.links = db.links.filter(x => x.merchantId !== uid);
@@ -1199,7 +1211,7 @@ async function route(req, res) {
     db.errors = db.errors.filter(x => x.merchantId !== uid);
     persist();
 
-    logAdminAudit(sqliteDb, {
+    await logAdminAudit(repository, {
       actorId: adm.actorId,
       actorEmail: adm.actorEmail,
       actorRole: adm.actorRole,
@@ -1219,47 +1231,61 @@ async function route(req, res) {
 
   /* ── Admin transactions ── */
   if (method === 'GET' && p === '/api/admin/transactions') {
-    const adm = requireAdmin(req, res, 'transactions.read');
+    const adm = await requireAdmin(req, res, 'transactions.read');
     if (!adm) return;
     let mid = url.searchParams.get('merchantId'), status = url.searchParams.get('status'), q = (url.searchParams.get('q') || '').toLowerCase(), limit = Math.min(Number(url.searchParams.get('limit') || 200), 1000);
-    let list = repository.transactions.listAll({ merchantId: mid, status, q, limit });
-    list = list.map(tx => {
-      let m = repository.merchants.findById(tx.merchantId);
+    let list = await repository.transactions.listAll({ merchantId: mid, status, q, limit });
+    list = await Promise.all(list.map(async tx => {
+      let m = await repository.merchants.findById(tx.merchantId);
       return { ...tx, merchantEmail: m?.email || '', merchantBusiness: m?.businessName || '' };
-    });
+    }));
     return json(res, 200, list);
   }
 
   /* ── Admin platform and database health (Task 5) ── */
   if (method === 'GET' && p === '/api/admin/system/health') {
-    const adm = requireAdmin(req, res, 'system.health.read');
+    const adm = await requireAdmin(req, res, 'system.health.read');
     if (!adm) return;
+
+    const tableCounts = {
+      merchants: await repository.merchants.count(),
+      transactions: await repository.transactions.count(),
+      links: await repository.links.count(),
+      upis: await repository.upis.count(),
+      adminUsers: await repository.adminUsers.count(),
+      auditTrail: await repository.adminAudit.count(),
+      errors: await repository.errors.count()
+    };
 
     let journalMode = 'unknown';
     let foreignKeys = false;
     let busyTimeout = 0;
-    try {
-      journalMode = sqliteDb.prepare('PRAGMA journal_mode;').get()?.journal_mode || 'unknown';
-      foreignKeys = Boolean(sqliteDb.prepare('PRAGMA foreign_keys;').get()?.foreign_keys);
-      busyTimeout = sqliteDb.prepare('PRAGMA busy_timeout;').get()?.timeout || 0;
-    } catch (_) {}
-
-    const tableCounts = {
-      merchants: repository.merchants.count(),
-      transactions: repository.transactions.count(),
-      links: repository.links.count(),
-      upis: repository.upis.count(),
-      adminUsers: repository.adminUsers.count(),
-      auditTrail: repository.adminAudit.count(),
-      errors: repository.errors.count()
-    };
+    if (sqliteDb) {
+      try {
+        journalMode = sqliteDb.prepare('PRAGMA journal_mode;').get()?.journal_mode || 'unknown';
+        foreignKeys = Boolean(sqliteDb.prepare('PRAGMA foreign_keys;').get()?.foreign_keys);
+        busyTimeout = sqliteDb.prepare('PRAGMA busy_timeout;').get()?.timeout || 0;
+      } catch (_) {}
+    } else {
+      journalMode = 'N/A (PostgreSQL WAL)';
+      foreignKeys = true;
+      busyTimeout = 10000;
+    }
 
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     let recentErrorsCount = 0;
     let recentAmbiguousCount = 0;
     try {
-      recentErrorsCount = sqliteDb.prepare('SELECT COUNT(*) as c FROM errors WHERE createdAt >= ?').get(oneDayAgo)?.c || 0;
-      recentAmbiguousCount = sqliteDb.prepare("SELECT COUNT(*) as c FROM transactions WHERE reconciliationStatus = 'flagged_ambiguous' OR status = 'under_review'").get()?.c || 0;
+      if (sqliteDb) {
+        recentErrorsCount = sqliteDb.prepare('SELECT COUNT(*) as c FROM errors WHERE createdAt >= ?').get(oneDayAgo)?.c || 0;
+        recentAmbiguousCount = sqliteDb.prepare("SELECT COUNT(*) as c FROM transactions WHERE reconciliationStatus = 'flagged_ambiguous' OR status = 'under_review'").get()?.c || 0;
+      } else {
+        const pool = getPostgresPool();
+        const errRes = await pool.query('SELECT COUNT(*) as c FROM errors WHERE "createdAt" >= $1', [oneDayAgo]);
+        recentErrorsCount = Number(errRes.rows[0]?.c || 0);
+        const ambRes = await pool.query("SELECT COUNT(*) as c FROM transactions WHERE \"reconciliationStatus\" = 'flagged_ambiguous' OR status = 'under_review'");
+        recentAmbiguousCount = Number(ambRes.rows[0]?.c || 0);
+      }
     } catch (_) {}
 
     const mem = process.memoryUsage();
@@ -1269,7 +1295,7 @@ async function route(req, res) {
       timestamp: new Date().toISOString(),
       uptimeSeconds: Math.floor(process.uptime()),
       database: {
-        engine: 'SQLite (better-sqlite3)',
+        engine: engine === 'postgres' ? 'PostgreSQL (Managed Cloud Database)' : 'SQLite (node:sqlite WAL mode)',
         journalMode,
         foreignKeys,
         busyTimeoutMs: busyTimeout,
@@ -1290,23 +1316,24 @@ async function route(req, res) {
   /* ── Admin errors ── */
   if (p === '/api/admin/errors') {
     if (method === 'GET') {
-      const adm = requireAdmin(req, res, 'errors.read');
+      const adm = await requireAdmin(req, res, 'errors.read');
       if (!adm) return;
       let limit = Math.min(Number(url.searchParams.get('limit') || 200), 1000);
-      let list = repository.errors.list({ limit }).map(e => {
-        let m = e.merchantId ? repository.merchants.findById(e.merchantId) : null;
+      let rawErrors = await repository.errors.list({ limit });
+      let list = await Promise.all(rawErrors.map(async e => {
+        let m = e.merchantId ? await repository.merchants.findById(e.merchantId) : null;
         return { ...e, merchantEmail: m?.email || '' };
-      });
+      }));
       return json(res, 200, list);
     }
     if (method === 'DELETE') {
-      const adm = requireAdmin(req, res, 'errors.clear');
+      const adm = await requireAdmin(req, res, 'errors.clear');
       if (!adm) return;
-      repository.errors.clear();
+      await repository.errors.clear();
       db.errors = [];
       persist();
 
-      logAdminAudit(sqliteDb, {
+      await logAdminAudit(repository, {
         actorId: adm.actorId,
         actorEmail: adm.actorEmail,
         actorRole: adm.actorRole,
@@ -1325,7 +1352,7 @@ async function route(req, res) {
 
   /* ── Client error logging (merchant auth) ── */
   if (method === 'POST' && p === '/api/errors') {
-    let m = auth(req); if (!m) return json(res, 401, { error: 'Authentication required' });
+    let m = await auth(req); if (!m) return json(res, 401, { error: 'Authentication required' });
     let b = await read(req);
     const errObj = {
       id: id('err'),
@@ -1337,7 +1364,7 @@ async function route(req, res) {
       col: b.col || null,
       createdAt: new Date().toISOString()
     };
-    repository.errors.log(errObj);
+    await repository.errors.log(errObj);
     db.errors.unshift(errObj);
     if (db.errors.length > 1000) db.errors = db.errors.slice(0, 1000);
     persist();
@@ -1346,23 +1373,23 @@ async function route(req, res) {
 
   /* ── WhatsApp routes ── */
   if (p === '/api/admin/whatsapp/status') {
-    const adm = requireAdmin(req, res, 'system.whatsapp.manage');
+    const adm = await requireAdmin(req, res, 'system.whatsapp.manage');
     if (!adm) return;
     return json(res, 200, wa ? wa.getStatus() : { available: false, connected: false, phone: null, qrReady: false });
   }
   if (method === 'POST' && p === '/api/admin/whatsapp/start') {
-    const adm = requireAdmin(req, res, 'system.whatsapp.manage');
+    const adm = await requireAdmin(req, res, 'system.whatsapp.manage');
     if (!adm) return;
     if (!wa) return json(res, 200, { available: false, error: 'admin-whatsapp.js not loaded' });
     let result = await wa.start(); return json(res, 200, result);
   }
   if (method === 'GET' && p === '/api/admin/whatsapp/qr') {
-    const adm = requireAdmin(req, res, 'system.whatsapp.manage');
+    const adm = await requireAdmin(req, res, 'system.whatsapp.manage');
     if (!adm) return;
     return json(res, 200, wa ? wa.getQR() : { qr: null });
   }
   if (method === 'POST' && p === '/api/admin/whatsapp/send') {
-    const adm = requireAdmin(req, res, 'system.whatsapp.manage');
+    const adm = await requireAdmin(req, res, 'system.whatsapp.manage');
     if (!adm) return;
     let b = await read(req);
     if (!wa) return json(res, 200, { available: false });
@@ -1370,7 +1397,7 @@ async function route(req, res) {
     return json(res, 200, result);
   }
   if (method === 'POST' && p === '/api/admin/whatsapp/disconnect') {
-    const adm = requireAdmin(req, res, 'system.whatsapp.manage');
+    const adm = await requireAdmin(req, res, 'system.whatsapp.manage');
     if (!adm) return;
     if (!wa) return json(res, 200, { available: false });
     let result = await wa.disconnect(); return json(res, 200, result);
@@ -1381,7 +1408,7 @@ async function route(req, res) {
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) return json(res, 503, { error: 'Google OAuth is not configured on this server' });
     let state = crypto.randomBytes(24).toString('base64url'), redirectUri = process.env.GOOGLE_REDIRECT_URI || `${url.origin}/api/auth/google/callback`;
     const expiresAt = Date.now() + 10 * 60 * 1000;
-    repository.oauthStates.create(state, expiresAt);
+    await repository.oauthStates.create(state, expiresAt);
     db.oauthStates.push({ state, expiresAt });
     persist();
     let authorize = new URL('https://accounts.google.com/o/oauth2/v2/auth');
@@ -1396,7 +1423,7 @@ async function route(req, res) {
   }
   if (method === 'GET' && p === '/api/auth/google/callback') {
     let state = url.searchParams.get('state');
-    const consumed = repository.oauthStates.consume(state);
+    const consumed = await repository.oauthStates.consume(state);
     db.oauthStates = db.oauthStates.filter(x => x.state !== state);
     persist();
     if (!consumed || !url.searchParams.get('code')) {
@@ -1420,7 +1447,7 @@ async function route(req, res) {
         headers: { Authorization: `Bearer ${tokens.access_token}` }
       }).then(r => r.ok ? r.json() : Promise.reject(new Error('Google profile request failed')));
       if (!profile.email_verified) return json(res, 403, { error: 'Google email must be verified' });
-      let m = repository.merchants.findByGoogleSubject(profile.sub) || repository.merchants.findByEmail(String(profile.email).toLowerCase()) ||
+      let m = await repository.merchants.findByGoogleSubject(profile.sub) || await repository.merchants.findByEmail(String(profile.email).toLowerCase()) ||
         db.merchants.find(x => x.googleSubject === profile.sub) || db.merchants.find(x => x.email === String(profile.email).toLowerCase());
       if (!m) {
         m = {
@@ -1434,10 +1461,10 @@ async function route(req, res) {
           googleVerified: true,
           createdAt: new Date().toISOString()
         };
-        m = repository.merchants.create(m);
+        m = await repository.merchants.create(m);
         db.merchants.push(m);
       } else {
-        m = repository.merchants.update(m.id, { googleSubject: profile.sub, googleVerified: true });
+        m = await repository.merchants.update(m.id, { googleSubject: profile.sub, googleVerified: true });
         const inMem = db.merchants.find(x => x.id === m.id);
         if (inMem) { inMem.googleSubject = profile.sub; inMem.googleVerified = true; }
       }
@@ -1453,10 +1480,10 @@ async function route(req, res) {
 
   /* ── Public checkout endpoints ── */
   if (method === 'GET' && p.startsWith('/api/checkout/') && p.endsWith('/status')) {
-    let slug = decodeURIComponent(p.slice(14, -7)), link = repository.links.findBySlug(slug) || (db.links && db.links.find(l => l.slug === slug && l.active));
+    let slug = decodeURIComponent(p.slice(14, -7)), link = await repository.links.findBySlug(slug) || (db.links && db.links.find(l => l.slug === slug && l.active));
     if (!link || !link.active) return json(res, 404, { error: 'Payment link not found' });
     let txId = url.searchParams.get('txId') || url.searchParams.get('transactionId'), ref = url.searchParams.get('ref') || url.searchParams.get('reference');
-    let tx = repository.transactions.findForCheckout(link.merchantId, { txId, ref }) ||
+    let tx = await repository.transactions.findForCheckout(link.merchantId, { txId, ref }) ||
       (db.transactions && db.transactions.find(t => t.merchantId === link.merchantId && ((txId && t.id === txId) || (ref && t.reference === ref))));
     if (!tx) return json(res, 404, { error: 'Transaction not found' });
     return json(res, 200, { status: tx.status, reference: tx.reference, utr: tx.utr || '', paidAt: tx.paidAt || null, verifiedBy: tx.verifiedBy || null });
@@ -1464,7 +1491,7 @@ async function route(req, res) {
   if (method === 'GET' && p.startsWith('/api/checkout/')) {
     let slug = decodeURIComponent(p.slice(14)).trim();
     if (!slug) return json(res, 400, { error: 'Payment link identifier is required', code: 'INVALID_SLUG' });
-    let link = repository.links.findBySlug(slug) || repository.links.findById(slug) ||
+    let link = await repository.links.findBySlug(slug) || await repository.links.findById(slug) ||
       (db.links && db.links.find(l => (l.slug === slug || l.id === slug)));
     if (!link) {
       return json(res, 404, { error: 'Payment link not found', code: 'LINK_NOT_FOUND' });
@@ -1472,7 +1499,7 @@ async function route(req, res) {
     if (!link.active) {
       return json(res, 404, { error: 'Payment link is inactive or has expired', code: 'LINK_INACTIVE' });
     }
-    return json(res, 200, publicLink(link));
+    return json(res, 200, await publicLink(link));
   }
 
   /* ── Checkout attempt (with rate limiting) ── */
@@ -1483,7 +1510,7 @@ async function route(req, res) {
       return res.end(JSON.stringify({ error: 'Too many checkout attempts. Please wait a moment.', retryAfter: rl.resetAfterSec }));
     }
 
-    let slug = decodeURIComponent(p.slice(14, -8)), link = repository.links.findBySlug(slug) || (db.links && db.links.find(l => l.slug === slug && l.active));
+    let slug = decodeURIComponent(p.slice(14, -8)), link = await repository.links.findBySlug(slug) || (db.links && db.links.find(l => l.slug === slug && l.active));
     if (!link || !link.active) return json(res, 404, { error: 'Payment link not found' });
     let b = await read(req);
     let amount = link.amountType === 'fixed' ? link.amount : Number(b.amount);
@@ -1509,7 +1536,7 @@ async function route(req, res) {
       }),
       createdAt: nowIso
     };
-    tx = repository.transactions.create(tx);
+    tx = await repository.transactions.create(tx);
     db.transactions.unshift(tx);
     persist();
     publish(link.merchantId, 'transaction.updated', tx);
@@ -1518,13 +1545,13 @@ async function route(req, res) {
 
   /* ── Checkout customer confirmation (UTR submission) ── */
   if (method === 'POST' && p.startsWith('/api/checkout/') && p.endsWith('/confirm')) {
-    let slug = decodeURIComponent(p.slice(14, -8)), link = repository.links.findBySlug(slug) || (db.links && db.links.find(l => l.slug === slug && l.active));
+    let slug = decodeURIComponent(p.slice(14, -8)), link = await repository.links.findBySlug(slug) || (db.links && db.links.find(l => l.slug === slug && l.active));
     if (!link || !link.active) return json(res, 404, { error: 'Payment link not found' });
     let b = await read(req);
     let utr = String(b.utr || '').trim().replace(/[^a-zA-Z0-9]/g, '').slice(0, 30);
     let ref = String(b.reference || '').trim();
     let amount = link.amountType === 'fixed' ? link.amount : Number(b.amount);
-    let tx = repository.transactions.findForCheckout(link.merchantId, { txId: b.transactionId, ref }) ||
+    let tx = await repository.transactions.findForCheckout(link.merchantId, { txId: b.transactionId, ref }) ||
       (db.transactions && db.transactions.find(t => t.merchantId === link.merchantId && (t.reference === ref || (b.transactionId && t.id === b.transactionId))));
     let nowIso = new Date().toISOString();
     if (!tx) {
@@ -1560,7 +1587,7 @@ async function route(req, res) {
         auditLog: finalLog,
         createdAt: nowIso
       };
-      tx = repository.transactions.create(tx);
+      tx = await repository.transactions.create(tx);
       db.transactions.unshift(tx);
     } else {
       if (utr) {
@@ -1573,7 +1600,7 @@ async function route(req, res) {
           utr,
           details: 'Customer submitted unverified UTR evidence'
         });
-        tx = repository.transactions.update(tx.id, {
+        tx = await repository.transactions.update(tx.id, {
           utr,
           utrSubmittedAt: nowIso,
           reconciliationStatus: tx.status === 'success' ? tx.reconciliationStatus : RECON_STATUS.UNVERIFIED_EVIDENCE,
@@ -1597,11 +1624,11 @@ async function route(req, res) {
   if (method === 'POST' && p === '/api/integration/payment-links') {
     let supplied = req.headers['x-api-key'] || '';
     let hash = crypto.createHash('sha256').update(supplied).digest('hex');
-    let key = repository.apiKeys.findByHash(hash) || (db.apiKeys && db.apiKeys.find(k => k.hash === hash));
+    let key = await repository.apiKeys.findByHash(hash) || (db.apiKeys && db.apiKeys.find(k => k.hash === hash));
     if (!key) return json(res, 401, { error: 'Invalid API key' });
-    let merchant = repository.merchants.findById(key.merchantId) || (db.merchants && db.merchants.find(x => x.id === key.merchantId));
+    let merchant = await repository.merchants.findById(key.merchantId) || (db.merchants && db.merchants.find(x => x.id === key.merchantId));
     let b = await read(req);
-    let mUpis = repository.upis.findByMerchant(merchant.id);
+    let mUpis = await repository.upis.findByMerchant(merchant.id);
     let upi = (mUpis.find(x => x.default) || mUpis[0]) || (db.upis && db.upis.find(x => x.merchantId === merchant.id && x.default));
     if (!upi || !b.name) return json(res, 400, { error: 'A default UPI and name are required' });
     let amountType = b.amountType === 'open' ? 'open' : 'fixed', amount = Number(b.amount);
@@ -1611,15 +1638,15 @@ async function route(req, res) {
       upiId: upi.upiId,
       name: b.name,
       description: b.description || '',
-      slug: uniqueSlug(b.slug || b.name),
+      slug: await uniqueSlug(b.slug || b.name),
       amount: amountType === 'fixed' ? amount : null,
       amountType,
       active: true,
       createdAt: new Date().toISOString()
     };
-    link = repository.links.create(link);
+    link = await repository.links.create(link);
     db.links.unshift(link);
-    repository.apiKeys.updateLastUsed(key.id);
+    await repository.apiKeys.updateLastUsed(key.id);
     key.lastUsedAt = new Date().toISOString();
     persist();
     return json(res, 201, { ...link, url: `${url.origin}/pay/${link.slug}` });
@@ -1662,7 +1689,7 @@ async function route(req, res) {
     }
 
     // Security & Authorization: Only authenticated merchants may download the companion app
-    const merchant = auth(req);
+    const merchant = await auth(req);
     if (!merchant) {
       return json(res, 401, {
         error: 'Unauthorized',
@@ -1703,7 +1730,7 @@ async function route(req, res) {
   /* ── Cashier Pairing & Management Endpoints (Milestone 8) ── */
   if (p === '/api/cashier/sessions') {
     if (method === 'POST') {
-      const m = auth(req);
+      const m = await auth(req);
       if (!m) return json(res, 401, { error: 'Authentication required' });
 
       const rl = checkRateLimit(clientIp, 'cashier_create_session', 30, 60 * 60 * 1000);
@@ -1731,7 +1758,7 @@ async function route(req, res) {
 
       // Create Cashier record
       const cashierId = 'csh_' + crypto.randomBytes(8).toString('hex');
-      const cashier = repository.cashiers.create({
+      const cashier = await repository.cashiers.create({
         id: cashierId,
         merchantId: m.id,
         name,
@@ -1751,7 +1778,7 @@ async function route(req, res) {
       const sessionId = 'cps_' + crypto.randomBytes(8).toString('hex');
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 minutes
 
-      const session = repository.cashierPairingSessions.create({
+      const session = await repository.cashierPairingSessions.create({
         id: sessionId,
         merchantId: m.id,
         cashierId: cashier.id,
@@ -1761,7 +1788,7 @@ async function route(req, res) {
         createdAt: new Date().toISOString()
       });
 
-      repository.cashierLogs.create({
+      await repository.cashierLogs.create({
         id: 'clg_' + crypto.randomBytes(8).toString('hex'),
         merchantId: m.id,
         cashierId: cashier.id,
@@ -1783,10 +1810,10 @@ async function route(req, res) {
     }
 
     if (method === 'GET') {
-      const m = auth(req);
+      const m = await auth(req);
       if (!m) return json(res, 401, { error: 'Authentication required' });
 
-      const activeSessions = repository.cashierPairingSessions.findActiveByMerchant(m.id);
+      const activeSessions = await repository.cashierPairingSessions.findActiveByMerchant(m.id);
       return json(res, 200, { ok: true, sessions: activeSessions });
     }
 
@@ -1798,22 +1825,22 @@ async function route(req, res) {
     if (!sessionId) return json(res, 400, { error: 'Session ID required' });
 
     if (method === 'GET') {
-      const m = auth(req);
+      const m = await auth(req);
       if (!m) return json(res, 401, { error: 'Authentication required' });
 
-      const session = repository.cashierPairingSessions.findById(sessionId);
+      const session = await repository.cashierPairingSessions.findById(sessionId);
       if (!session || session.merchantId !== m.id) {
         return json(res, 404, { error: 'Pairing session not found' });
       }
 
       if (session.status !== 'completed' && session.status !== 'expired' && session.status !== 'revoked') {
         if (new Date(session.expiresAt) < new Date()) {
-          repository.cashierPairingSessions.update(session.id, { status: 'expired' });
+          await repository.cashierPairingSessions.update(session.id, { status: 'expired' });
           session.status = 'expired';
         }
       }
 
-      const cashier = repository.cashiers.findById(session.cashierId);
+      const cashier = await repository.cashiers.findById(session.cashierId);
       return json(res, 200, {
         ok: true,
         sessionId: session.id,
@@ -1841,14 +1868,14 @@ async function route(req, res) {
     }
 
     const codeHash = crypto.createHash('sha256').update(rawCode).digest('hex');
-    const session = repository.cashierPairingSessions.findByServerCodeHash(codeHash);
+    const session = await repository.cashierPairingSessions.findByServerCodeHash(codeHash);
 
     if (!session) {
       return json(res, 400, { error: 'Invalid Server Code. Please check the code in your dashboard and try again.' });
     }
 
     if (new Date(session.expiresAt) < new Date()) {
-      repository.cashierPairingSessions.update(session.id, { status: 'expired' });
+      await repository.cashierPairingSessions.update(session.id, { status: 'expired' });
       return json(res, 400, { error: 'Server Code has expired (15-minute validity). Please generate a new code in your dashboard.' });
     }
 
@@ -1856,8 +1883,8 @@ async function route(req, res) {
       return json(res, 400, { error: 'Server Code has already been used or revoked.' });
     }
 
-    const cashier = repository.cashiers.findById(session.cashierId);
-    const merchant = repository.merchants.findById(session.merchantId);
+    const cashier = await repository.cashiers.findById(session.cashierId);
+    const merchant = await repository.merchants.findById(session.merchantId);
     if (!cashier || !merchant) {
       return json(res, 404, { error: 'Associated merchant or cashier record not found.' });
     }
@@ -1869,7 +1896,7 @@ async function route(req, res) {
     // Create a scoped companion cashier API key
     const rawApiKey = 'sk_csh_' + crypto.randomBytes(24).toString('hex');
     const keyHash = crypto.createHash('sha256').update(rawApiKey).digest('hex');
-    repository.apiKeys.create({
+    await repository.apiKeys.create({
       id: 'key_' + crypto.randomBytes(8).toString('hex'),
       merchantId: merchant.id,
       name: `Companion Cashier (${cashier.name})`,
@@ -1878,16 +1905,16 @@ async function route(req, res) {
       createdAt: new Date().toISOString()
     });
 
-    repository.cashierPairingSessions.update(session.id, {
+    await repository.cashierPairingSessions.update(session.id, {
       appCodeHash,
       status: 'app_code_generated'
     });
 
-    repository.cashiers.update(cashier.id, {
+    await repository.cashiers.update(cashier.id, {
       lastSeenAt: new Date().toISOString()
     });
 
-    repository.cashierLogs.create({
+    await repository.cashierLogs.create({
       id: 'clg_' + crypto.randomBytes(8).toString('hex'),
       merchantId: merchant.id,
       cashierId: cashier.id,
@@ -1912,7 +1939,7 @@ async function route(req, res) {
 
   // Merchant verifies 6-digit App Code in Dashboard
   if (p === '/api/cashier/verify-app-code' && method === 'POST') {
-    const m = auth(req);
+    const m = await auth(req);
     if (!m) return json(res, 401, { error: 'Authentication required' });
 
     const b = await read(req);
@@ -1926,13 +1953,13 @@ async function route(req, res) {
       return json(res, 400, { error: 'App Code must be exactly 6 digits.' });
     }
 
-    const session = repository.cashierPairingSessions.findById(sessionId);
+    const session = await repository.cashierPairingSessions.findById(sessionId);
     if (!session || session.merchantId !== m.id) {
       return json(res, 404, { error: 'Pairing session not found.' });
     }
 
     if (new Date(session.expiresAt) < new Date()) {
-      repository.cashierPairingSessions.update(session.id, { status: 'expired' });
+      await repository.cashierPairingSessions.update(session.id, { status: 'expired' });
       return json(res, 400, { error: 'Pairing session has expired. Please initiate connection again.' });
     }
 
@@ -1944,27 +1971,27 @@ async function route(req, res) {
     if (codeHash !== session.appCodeHash) {
       const attempts = (session.attempts || 0) + 1;
       if (attempts >= 5) {
-        repository.cashierPairingSessions.update(session.id, { attempts, status: 'revoked' });
+        await repository.cashierPairingSessions.update(session.id, { attempts, status: 'revoked' });
         return json(res, 400, { error: 'Too many incorrect App Code attempts. Session revoked for security.' });
       }
-      repository.cashierPairingSessions.update(session.id, { attempts });
+      await repository.cashierPairingSessions.update(session.id, { attempts });
       return json(res, 400, { error: `Invalid App Code (${5 - attempts} attempts remaining). Check the code displayed in the companion app.` });
     }
 
     // Success! Activate cashier and complete session
     const now = new Date().toISOString();
-    repository.cashierPairingSessions.update(session.id, {
+    await repository.cashierPairingSessions.update(session.id, {
       status: 'completed',
       completedAt: now
     });
 
-    const cashier = repository.cashiers.update(session.cashierId, {
+    const cashier = await repository.cashiers.update(session.cashierId, {
       status: 'active',
       pairedAt: now,
       lastSeenAt: now
     });
 
-    repository.cashierLogs.create({
+    await repository.cashierLogs.create({
       id: 'clg_' + crypto.randomBytes(8).toString('hex'),
       merchantId: m.id,
       cashierId: cashier.id,
@@ -1983,35 +2010,35 @@ async function route(req, res) {
 
   // Merchant Cashier List
   if (p === '/api/cashier/list' && method === 'GET') {
-    const m = auth(req);
+    const m = await auth(req);
     if (!m) return json(res, 401, { error: 'Authentication required' });
 
-    const list = repository.cashiers.findByMerchant(m.id);
+    const list = await repository.cashiers.findByMerchant(m.id);
     return json(res, 200, { ok: true, cashiers: list });
   }
 
   // Merchant Cashier Logs
   if (p === '/api/cashier/logs' && method === 'GET') {
-    const m = auth(req);
+    const m = await auth(req);
     if (!m) return json(res, 401, { error: 'Authentication required' });
 
-    const logs = repository.cashierLogs.findByMerchant(m.id, 50);
+    const logs = await repository.cashierLogs.findByMerchant(m.id, 50);
     return json(res, 200, { ok: true, logs });
   }
 
   // Revoke / Delete Cashier
   if (p.startsWith('/api/cashier/') && method === 'DELETE') {
-    const m = auth(req);
+    const m = await auth(req);
     if (!m) return json(res, 401, { error: 'Authentication required' });
 
     const cashierId = p.split('/')[3];
-    const cashier = repository.cashiers.findById(cashierId);
+    const cashier = await repository.cashiers.findById(cashierId);
     if (!cashier || cashier.merchantId !== m.id) {
       return json(res, 404, { error: 'Cashier not found' });
     }
 
-    repository.cashiers.update(cashier.id, { status: 'revoked' });
-    repository.cashierLogs.create({
+    await repository.cashiers.update(cashier.id, { status: 'revoked' });
+    await repository.cashierLogs.create({
       id: 'clg_' + crypto.randomBytes(8).toString('hex'),
       merchantId: m.id,
       cashierId: cashier.id,
@@ -2035,7 +2062,7 @@ async function route(req, res) {
     let supplied = req.headers['x-api-key'] || (req.headers['authorization']?.replace(/^Bearer\s+/i, '')) || '';
     if (method === 'GET') {
       let hash = crypto.createHash('sha256').update(supplied).digest('hex');
-      let key = supplied ? (repository.apiKeys.findByHash(hash) || (db.apiKeys && db.apiKeys.find(k => k.hash === hash))) : null;
+      let key = supplied ? (await repository.apiKeys.findByHash(hash) || (db.apiKeys && db.apiKeys.find(k => k.hash === hash))) : null;
       if (!key) return json(res, 401, { error: 'Invalid API key' });
       return json(res, 200, { ok: true, merchantId: key.merchantId, status: 'listening' });
     }
@@ -2043,7 +2070,7 @@ async function route(req, res) {
       let b = await read(req);
       if (!supplied && b.apiKey) supplied = b.apiKey;
       let hash = crypto.createHash('sha256').update(supplied).digest('hex');
-      let key = supplied ? (repository.apiKeys.findByHash(hash) || (db.apiKeys && db.apiKeys.find(k => k.hash === hash))) : null;
+      let key = supplied ? (await repository.apiKeys.findByHash(hash) || (db.apiKeys && db.apiKeys.find(k => k.hash === hash))) : null;
       if (!key) return json(res, 401, { error: 'Invalid API key' });
       if (b.merchantId && b.merchantId !== key.merchantId) return json(res, 403, { error: 'Merchant ID mismatch' });
       let amount = Number(b.amount);
@@ -2052,20 +2079,20 @@ async function route(req, res) {
       if (!utr || utr.length < 6) return json(res, 400, { error: 'A valid UTR/reference number (min 6 characters) is required' });
       let customerUpi = String(b.customerUpi || '').trim();
       let timestamp = b.timestamp && !isNaN(Date.parse(b.timestamp)) ? new Date(b.timestamp).toISOString() : new Date().toISOString();
-      repository.apiKeys.updateLastUsed(key.id);
+      await repository.apiKeys.updateLastUsed(key.id);
       key.lastUsedAt = new Date().toISOString();
 
       let cashierId = b.cashierId ? String(b.cashierId).trim() : null;
       if (cashierId) {
-        const csh = repository.cashiers.findById(cashierId);
+        const csh = await repository.cashiers.findById(cashierId);
         if (csh && csh.merchantId === key.merchantId) {
-          repository.cashiers.update(csh.id, { lastSeenAt: new Date().toISOString() });
+          await repository.cashiers.update(csh.id, { lastSeenAt: new Date().toISOString() });
         } else {
           cashierId = null;
         }
       }
 
-      const reconResult = reconcileCompanionPayment({
+      const reconResult = await reconcileCompanionPayment({
         repository,
         merchantId: key.merchantId,
         amount,
@@ -2081,7 +2108,7 @@ async function route(req, res) {
           if (inMem) Object.assign(inMem, reconResult.transaction);
         } else if (reconResult.candidateReferences) {
           for (const cRef of reconResult.candidateReferences) {
-            const fresh = repository.transactions.findByReference(cRef);
+            const fresh = await repository.transactions.findByReference(cRef);
             const inMem = db.transactions.find(t => t.reference === cRef);
             if (fresh && inMem) Object.assign(inMem, fresh);
           }
@@ -2163,7 +2190,7 @@ async function route(req, res) {
       return json(res, 400, { error: 'Missing merchantId in decoded webhook payload' });
     }
 
-    const account = repository.businessAccounts.findByProviderAndMid('phonepe', merchantIdRef) ||
+    const account = await repository.businessAccounts.findByProviderAndMid('phonepe', merchantIdRef) ||
       (db.businessAccounts || []).find(a => a.provider === 'phonepe' && a.merchantIdRef === merchantIdRef && a.status === 'connected');
     if (!account) {
       return json(res, 401, { error: 'Unrecognized or inactive PhonePe merchant account' });
@@ -2190,7 +2217,7 @@ async function route(req, res) {
     const providerRef = String(data.providerReferenceId || data.transactionId || '').trim();
     const isSuccess = decodedJson.code === 'PAYMENT_SUCCESS' || decodedJson.success === true || data.responseCode === 'SUCCESS';
 
-    const tx = repository.transactions.findForCheckout(account.merchantId, { txId: merchantTransactionId, ref: merchantTransactionId }) ||
+    const tx = await repository.transactions.findForCheckout(account.merchantId, { txId: merchantTransactionId, ref: merchantTransactionId }) ||
       (db.transactions && db.transactions.find(t => t.merchantId === account.merchantId && (t.reference === merchantTransactionId || t.id === merchantTransactionId)));
     if (!tx) {
       return json(res, 404, { error: 'Transaction matching merchantTransactionId not found' });
@@ -2201,7 +2228,7 @@ async function route(req, res) {
       const expectedPaise = Number(tx.amount_paise || Math.round(tx.amount * 100));
       const receivedPaise = Number(data.amount);
       if (expectedPaise !== receivedPaise) {
-        repository.transactions.update(tx.id, {
+        await repository.transactions.update(tx.id, {
           reconciliationStatus: RECON_STATUS.FLAGGED_AMBIGUOUS,
           ambiguityReason: `PhonePe amount mismatch: expected ${expectedPaise} paise, received ${receivedPaise} paise`,
           auditLog: appendAuditLog(tx.auditLog, {
@@ -2218,7 +2245,7 @@ async function route(req, res) {
       }
     }
 
-    const reconResult = reconcileProviderWebhook({
+    const reconResult = await reconcileProviderWebhook({
       repository,
       tx,
       isSuccess,
@@ -2263,7 +2290,7 @@ async function route(req, res) {
       return json(res, 400, { error: 'Missing MID in Paytm webhook payload' });
     }
 
-    const account = repository.businessAccounts.findByProviderAndMid('paytm', mid) ||
+    const account = await repository.businessAccounts.findByProviderAndMid('paytm', mid) ||
       (db.businessAccounts || []).find(a => a.provider === 'paytm' && a.merchantIdRef === mid && a.status === 'connected');
     if (!account) {
       return json(res, 401, { error: 'Unrecognized or inactive Paytm merchant account' });
@@ -2289,7 +2316,7 @@ async function route(req, res) {
     const status = String(b.STATUS || b.status || '').trim();
     const isSuccess = status === 'TXN_SUCCESS' || status === 'SUCCESS';
 
-    const tx = repository.transactions.findForCheckout(account.merchantId, { txId: orderId, ref: orderId }) ||
+    const tx = await repository.transactions.findForCheckout(account.merchantId, { txId: orderId, ref: orderId }) ||
       (db.transactions && db.transactions.find(t => t.merchantId === account.merchantId && (t.reference === orderId || t.id === orderId)));
     if (!tx) {
       return json(res, 404, { error: 'Transaction matching ORDERID not found' });
@@ -2300,7 +2327,7 @@ async function route(req, res) {
       const expectedAmount = Number(tx.amount);
       const receivedAmount = Number(b.TXNAMOUNT);
       if (Math.abs(expectedAmount - receivedAmount) > 0.01) {
-        repository.transactions.update(tx.id, {
+        await repository.transactions.update(tx.id, {
           reconciliationStatus: RECON_STATUS.FLAGGED_AMBIGUOUS,
           ambiguityReason: `Paytm amount mismatch: expected ₹${expectedAmount}, received ₹${receivedAmount}`,
           auditLog: appendAuditLog(tx.auditLog, {
@@ -2317,7 +2344,7 @@ async function route(req, res) {
       }
     }
 
-    const reconResult = reconcileProviderWebhook({
+    const reconResult = await reconcileProviderWebhook({
       repository,
       tx,
       isSuccess,
@@ -2348,12 +2375,12 @@ async function route(req, res) {
     return json(res, 200, { success: true, verified: true, transaction: updatedTx });
   }
 
-  let m = required(req, res); if (!m) return;
+  let m = await required(req, res); if (!m) return;
 
   /* ── Business Accounts (PhonePe & Paytm Direct Linking) ── */
   if (p === '/api/business-accounts') {
     if (method === 'GET') {
-      let list = repository.businessAccounts.findByMerchant(m.id).map(acc => ({
+      let list = (await repository.businessAccounts.findByMerchant(m.id)).map(acc => ({
         id: acc.id,
         merchantId: acc.merchantId,
         provider: acc.provider,
@@ -2381,10 +2408,10 @@ async function route(req, res) {
       let rawToken = String(b.token || '').trim();
       if (!rawToken) return json(res, 400, { error: 'API token or secret salt key is required' });
 
-      let existing = repository.businessAccounts.findByMerchant(m.id).find(x => x.provider === provider) ||
+      let existing = (await repository.businessAccounts.findByMerchant(m.id)).find(x => x.provider === provider) ||
         (db.businessAccounts || []).find(x => x.merchantId === m.id && x.provider === provider);
       if (existing) {
-        const updated = repository.businessAccounts.update(existing.id, {
+        const updated = await repository.businessAccounts.update(existing.id, {
           accountName: (b.accountName || existing.accountName || (provider === 'phonepe' ? 'PhonePe Business' : 'Paytm Business')).trim(),
           phoneNumber: phone,
           merchantIdRef,
@@ -2424,7 +2451,7 @@ async function route(req, res) {
         lastSyncedAt: new Date().toISOString(),
         createdAt: new Date().toISOString()
       };
-      account = repository.businessAccounts.create(account);
+      account = await repository.businessAccounts.create(account);
       db.businessAccounts.push(account);
       persist();
       return json(res, 201, {
@@ -2451,7 +2478,7 @@ async function route(req, res) {
       let utr = String(b.utr || '').trim().replace(/[^a-zA-Z0-9]/g, '').slice(0, 30);
       let provider = String(b.provider || '').toLowerCase().trim();
 
-      let tx = repository.transactions.findForCheckout(m.id, { txId, ref }) ||
+      let tx = await repository.transactions.findForCheckout(m.id, { txId, ref }) ||
         (db.transactions && db.transactions.find(t => t.merchantId === m.id && ((txId && t.id === txId) || (ref && t.reference === ref))));
       if (!tx) return json(res, 404, { error: 'Pending transaction not found' });
 
@@ -2459,7 +2486,7 @@ async function route(req, res) {
         return json(res, 200, { verified: true, alreadyVerified: true, transaction: tx });
       }
 
-      let acc = repository.businessAccounts.findByMerchant(m.id).find(a => (provider ? a.provider === provider : true) && a.status === 'connected') ||
+      let acc = (await repository.businessAccounts.findByMerchant(m.id)).find(a => (provider ? a.provider === provider : true) && a.status === 'connected') ||
         (db.businessAccounts || []).find(a => a.merchantId === m.id && (provider ? a.provider === provider : true) && a.status === 'connected');
       if (!acc) return json(res, 400, { error: 'No active linked business account found for this verification' });
 
@@ -2475,7 +2502,7 @@ async function route(req, res) {
           utr,
           details: `Merchant requested direct verification via ${acc.provider || provider || 'business_account'}`
         });
-        tx = repository.transactions.update(tx.id, {
+        tx = await repository.transactions.update(tx.id, {
           utr,
           utrSubmittedAt: nowIso,
           reconciliationStatus: RECON_STATUS.UNVERIFIED_EVIDENCE,
@@ -2501,11 +2528,11 @@ async function route(req, res) {
 
     let parts = sub.split('/');
     let accId = parts[0];
-    let account = repository.businessAccounts.findById(accId) || (db.businessAccounts || []).find(x => x.id === accId && x.merchantId === m.id);
+    let account = await repository.businessAccounts.findById(accId) || (db.businessAccounts || []).find(x => x.id === accId && x.merchantId === m.id);
     if (!account || account.merchantId !== m.id) return json(res, 404, { error: 'Linked business account not found' });
 
     if (parts.length === 2 && parts[1] === 'test' && method === 'POST') {
-      const updated = repository.businessAccounts.update(account.id, {
+      const updated = await repository.businessAccounts.update(account.id, {
         lastSyncedAt: new Date().toISOString(),
         status: 'connected'
       });
@@ -2529,7 +2556,7 @@ async function route(req, res) {
       if (typeof b.autoVerify === 'boolean') partial.autoVerify = b.autoVerify;
       partial.lastSyncedAt = new Date().toISOString();
 
-      const updated = repository.businessAccounts.update(account.id, partial);
+      const updated = await repository.businessAccounts.update(account.id, partial);
       const inMem = db.businessAccounts.find(x => x.id === account.id);
       if (inMem) Object.assign(inMem, updated);
       persist();
@@ -2547,7 +2574,7 @@ async function route(req, res) {
     }
 
     if (method === 'DELETE') {
-      repository.businessAccounts.delete(account.id, m.id);
+      await repository.businessAccounts.delete(account.id, m.id);
       db.businessAccounts = db.businessAccounts.filter(x => x.id !== account.id);
       persist();
       return json(res, 204, {});
@@ -2573,7 +2600,7 @@ async function route(req, res) {
 
   if (method === 'GET' && p === '/api/dashboard') {
     let range = url.searchParams.get('range') || 'month';
-    const overview = repository.transactions.getMerchantOverviewStats(m.id, range);
+    const overview = await repository.transactions.getMerchantOverviewStats(m.id, range);
     return json(res, 200, {
       stats: {
         volume: overview.volume,
@@ -2607,7 +2634,7 @@ async function route(req, res) {
         if (number && !/^\d{10}$/.test(number)) return json(res, 400, { error: 'Enter a 10-digit WhatsApp number' });
         partial.whatsappNumber = number;
       }
-      m = repository.merchants.update(m.id, partial);
+      m = await repository.merchants.update(m.id, partial);
       const inMem = db.merchants.find(x => x.id === m.id);
       if (inMem) Object.assign(inMem, m);
       persist();
@@ -2616,13 +2643,13 @@ async function route(req, res) {
   }
 
   if (p === '/api/upis') {
-    if (method === 'GET') return json(res, 200, repository.upis.findByMerchant(m.id));
+    if (method === 'GET') return json(res, 200, await repository.upis.findByMerchant(m.id));
     if (method === 'POST') {
       let b = await read(req), upi = String(b.upiId || '').trim().toLowerCase(), phone = String(b.phoneNumber || '').replace(/\D/g, '');
       if (!/^[\w.-]+@[\w.-]+$/.test(upi)) return json(res, 400, { error: 'Enter a valid UPI ID (e.g. store@okaxis or name@upi)' });
       if (!/^\d{10}$/.test(phone)) return json(res, 400, { error: 'Enter a valid 10-digit mobile number linked to this UPI ID' });
       let autoLabel = (b.label || upi.split('@')[0] || 'UPI Account').trim();
-      const existingUpis = repository.upis.findByMerchant(m.id);
+      const existingUpis = await repository.upis.findByMerchant(m.id);
       let account = {
         id: id('upi'),
         merchantId: m.id,
@@ -2632,10 +2659,10 @@ async function route(req, res) {
         default: existingUpis.length === 0,
         createdAt: new Date().toISOString()
       };
-      account = repository.upis.create(account);
+      account = await repository.upis.create(account);
       db.upis.push(account);
       if (!m.whatsappNumber) {
-        m = repository.merchants.update(m.id, { whatsappNumber: phone });
+        m = await repository.merchants.update(m.id, { whatsappNumber: phone });
         const inMem = db.merchants.find(x => x.id === m.id);
         if (inMem) inMem.whatsappNumber = phone;
       }
@@ -2645,15 +2672,15 @@ async function route(req, res) {
   }
 
   if (p.startsWith('/api/upis/')) {
-    let rest = p.slice(10).split('/'), account = repository.upis.findById(rest[0]);
+    let rest = p.slice(10).split('/'), account = await repository.upis.findById(rest[0]);
     if (!account || account.merchantId !== m.id) return json(res, 404, { error: 'UPI account not found' });
     if (method === 'DELETE') {
-      repository.upis.delete(account.id);
+      await repository.upis.delete(account.id);
       db.upis = db.upis.filter(x => x.id !== account.id);
       if (account.default) {
-        let next = repository.upis.findByMerchant(m.id)[0];
+        let next = (await repository.upis.findByMerchant(m.id))[0];
         if (next) {
-          repository.upis.setDefault(m.id, next.id);
+          await repository.upis.setDefault(m.id, next.id);
           const inMemNext = db.upis.find(x => x.id === next.id);
           if (inMemNext) inMemNext.default = true;
         }
@@ -2664,7 +2691,7 @@ async function route(req, res) {
     if (method === 'PATCH') {
       let b = await read(req);
       if (rest[1] === 'default') {
-        repository.upis.setDefault(m.id, account.id);
+        await repository.upis.setDefault(m.id, account.id);
         account.default = true;
         db.upis.filter(x => x.merchantId === m.id).forEach(x => x.default = x.id === account.id);
       }
@@ -2676,7 +2703,7 @@ async function route(req, res) {
         partial.phoneNumber = phone;
       }
       if (Object.keys(partial).length > 0) {
-        account = repository.upis.update(account.id, partial);
+        account = await repository.upis.update(account.id, partial);
         const inMem = db.upis.find(x => x.id === account.id);
         if (inMem) Object.assign(inMem, account);
       }
@@ -2688,10 +2715,10 @@ async function route(req, res) {
   const ALLOWED_TEMPLATES = new Set(['classic', 'minimal', 'premium-dark', 'modern-gradient', 'compact-upi']);
 
   if (p === '/api/links') {
-    if (method === 'GET') return json(res, 200, repository.links.findByMerchant(m.id));
+    if (method === 'GET') return json(res, 200, await repository.links.findByMerchant(m.id));
     if (method === 'POST') {
       let b = await read(req);
-      const mUpis = repository.upis.findByMerchant(m.id);
+      const mUpis = await repository.upis.findByMerchant(m.id);
       let upi = (b.upiId && mUpis.find(u => u.id === b.upiId)) || mUpis.find(x => x.default) || mUpis[0] ||
         (db.upis && db.upis.find(x => x.merchantId === m.id && x.default));
       if (!b.name || !String(b.name).trim()) return json(res, 400, { error: 'Product or payment title is required' });
@@ -2701,7 +2728,7 @@ async function route(req, res) {
       
       const template = (b.template && ALLOWED_TEMPLATES.has(b.template)) ? b.template : 'classic';
       const rawSlug = (b.slug || b.name).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40);
-      const cleanSlug = uniqueSlug(rawSlug || 'pay');
+      const cleanSlug = await uniqueSlug(rawSlug || 'pay');
 
       let link = {
         id: id('lnk'),
@@ -2716,7 +2743,7 @@ async function route(req, res) {
         active: true,
         createdAt: new Date().toISOString()
       };
-      link = repository.links.create(link);
+      link = await repository.links.create(link);
       db.links.unshift(link);
       persist();
 
@@ -2731,7 +2758,7 @@ async function route(req, res) {
   }
 
   if (p.startsWith('/api/links/')) {
-    let link = repository.links.findById(p.slice(11));
+    let link = await repository.links.findById(p.slice(11));
     if (!link || link.merchantId !== m.id) return json(res, 404, { error: 'Payment link not found' });
     if (method === 'PATCH') {
       let b = await read(req);
@@ -2741,7 +2768,7 @@ async function route(req, res) {
       if (typeof b.description === 'string') updates.description = b.description.trim();
       if (typeof b.template === 'string' && ALLOWED_TEMPLATES.has(b.template)) updates.template = b.template;
 
-      link = repository.links.update(link.id, updates);
+      link = await repository.links.update(link.id, updates);
       const inMem = db.links.find(x => x.id === link.id);
       if (inMem) Object.assign(inMem, link);
       persist();
@@ -2755,7 +2782,7 @@ async function route(req, res) {
       return json(res, 200, link);
     }
     if (method === 'DELETE') {
-      repository.links.delete(link.id);
+      await repository.links.delete(link.id);
       db.links = db.links.filter(x => x.id !== link.id);
       persist();
       return json(res, 204, {});
@@ -2771,7 +2798,7 @@ async function route(req, res) {
     if (!subject) return json(res, 400, { error: 'Support query subject is required' });
     if (!message) return json(res, 400, { error: 'Support query message is required' });
 
-    const query = repository.supportQueries.create({
+    const query = await repository.supportQueries.create({
       id: id('sup'),
       merchantId: m.id,
       category,
@@ -2790,19 +2817,19 @@ async function route(req, res) {
   }
 
   if (p === '/api/support/queries' && method === 'GET') {
-    const list = repository.supportQueries.findByMerchant(m.id);
+    const list = await repository.supportQueries.findByMerchant(m.id);
     return json(res, 200, list);
   }
 
   if (method === 'GET' && p === '/api/transactions') {
     let q = url.searchParams.get('q')?.toLowerCase() || '', status = url.searchParams.get('status'), range = url.searchParams.get('range') || 'month', start = url.searchParams.get('start'), end = url.searchParams.get('end');
-    let list = repository.transactions.findByMerchant(m.id, { q, status, range, start, end });
+    let list = await repository.transactions.findByMerchant(m.id, { q, status, range, start, end });
     return json(res, 200, list);
   }
 
   /* ── Merchant Transaction Update (Task 3: Block Self-Approval) ── */
   if (p.startsWith('/api/transactions/') && method === 'PATCH') {
-    let tid = p.slice(18), tx = repository.transactions.findById(tid) || (db.transactions && db.transactions.find(x => x.id === tid && x.merchantId === m.id));
+    let tid = p.slice(18), tx = await repository.transactions.findById(tid) || (db.transactions && db.transactions.find(x => x.id === tid && x.merchantId === m.id));
     if (!tx || tx.merchantId !== m.id) return json(res, 404, { error: 'Transaction not found' });
     let b = await read(req);
 
@@ -2841,7 +2868,7 @@ async function route(req, res) {
         source: 'merchant-dashboard',
         details: `Merchant updated metadata fields: ${Object.keys(partial).join(', ')}`
       });
-      tx = repository.transactions.update(tx.id, partial);
+      tx = await repository.transactions.update(tx.id, partial);
       const inMem = db.transactions.find(t => t.id === tx.id);
       if (inMem) Object.assign(inMem, tx);
       persist();
@@ -2851,7 +2878,7 @@ async function route(req, res) {
   }
 
   if (p === '/api/keys') {
-    if (method === 'GET') return json(res, 200, repository.apiKeys.findByMerchant(m.id).map(({ hash, ...x }) => x));
+    if (method === 'GET') return json(res, 200, (await repository.apiKeys.findByMerchant(m.id)).map(({ hash, ...x }) => x));
     if (method === 'POST') {
       let plain = 'sk_live_' + crypto.randomBytes(22).toString('base64url'), key = {
         id: id('key'),
@@ -2862,7 +2889,7 @@ async function route(req, res) {
         createdAt: new Date().toISOString(),
         lastUsedAt: null
       };
-      key = repository.apiKeys.create(key);
+      key = await repository.apiKeys.create(key);
       db.apiKeys.push(key);
       persist();
       return json(res, 201, { ...key, key: plain });
@@ -2870,7 +2897,7 @@ async function route(req, res) {
   }
   if (p.startsWith('/api/keys/') && method === 'DELETE') {
     const keyId = p.slice(10);
-    repository.apiKeys.delete(keyId, m.id);
+    await repository.apiKeys.delete(keyId, m.id);
     db.apiKeys = db.apiKeys.filter(x => !(x.id === keyId && x.merchantId === m.id));
     persist();
     return json(res, 204, {});
@@ -2929,18 +2956,57 @@ const server = http.createServer((req, res) => {
   }
 });
 
+async function initDatabase() {
+  validateDatabaseConfiguration();
+  const currentEngine = getDatabaseEngine();
+  if (currentEngine === 'postgres') {
+    const pool = getPostgresPool();
+    const client = await pool.connect();
+    try {
+      const v = await applyPostgresMigrations(client);
+      console.log(`[SakkuPay] PostgreSQL migrations ready (version ${v})`);
+    } finally {
+      client.release();
+    }
+  }
+  try {
+    const count = await repository.adminUsers.count();
+    if (count === 0) {
+      await repository.adminUsers.create({
+        id: 'adm_default_superadmin',
+        email: (process.env.ADMIN_EMAIL || `${ADMIN_USERNAME}@sakkupay.local`).toLowerCase(),
+        name: 'Primary SuperAdmin',
+        passwordHash: hashPassword(ADMIN_PASSWORD),
+        role: ADMIN_ROLES.SUPER_ADMIN,
+        active: true
+      });
+    }
+  } catch (e) {
+    console.warn('SuperAdmin seed check:', e.message);
+  }
+}
+
 if (require.main === module) {
   validateProductionEnvironment();
-  const PORT = process.env.PORT || 3000;
-  server.listen(PORT, () => console.log('SakkuPay running at http://localhost:' + PORT));
+  initDatabase().then(() => {
+    const PORT = process.env.PORT || 3000;
+    server.listen(PORT, () => console.log('SakkuPay running at http://localhost:' + PORT));
+  }).catch(err => {
+    console.error('Fatal initialization error:', err);
+    process.exit(1);
+  });
 
   const shutdown = (signal) => {
     console.log(`\nReceived ${signal}. Starting graceful shutdown...`);
-    server.close(() => {
+    server.close(async () => {
       console.log('HTTP server closed. Finalizing database state...');
       try {
         persist();
-        sqliteDb.close();
+        if (sqliteDb) sqliteDb.close();
+        if (engine === 'postgres') {
+          const pool = getPostgresPool();
+          if (pool) await pool.end();
+        }
       } catch (err) {
         console.error('Error closing database during shutdown:', err.message);
       }

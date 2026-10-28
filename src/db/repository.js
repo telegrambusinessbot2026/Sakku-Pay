@@ -6,9 +6,10 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { getDatabase } = require('./connection');
+const { getDatabase, getDatabaseEngine, getPostgresPool } = require('./connection');
 const { initSchema } = require('./schema');
 const { logAdminAudit } = require('../services/adminAudit');
+const { createPostgresRepository } = require('./postgresRepository');
 
 function createRepository(db = getDatabase()) {
   initSchema(db);
@@ -1414,6 +1415,18 @@ function createRepository(db = getDatabase()) {
         db.exec('ROLLBACK;');
         throw e;
       }
+    },
+
+    withTransaction(callback) {
+      db.exec('BEGIN TRANSACTION;');
+      try {
+        const result = callback(repository);
+        db.exec('COMMIT;');
+        return result;
+      } catch (err) {
+        try { db.exec('ROLLBACK;'); } catch (_) {}
+        throw err;
+      }
     }
   };
 
@@ -1423,7 +1436,16 @@ function createRepository(db = getDatabase()) {
 let defaultRepositoryInstance = null;
 
 function getRepository(db) {
-  if (db) return createRepository(db);
+  if (db) {
+    if (db.query && typeof db.query === 'function') {
+      return createPostgresRepository(db);
+    }
+    return createRepository(db);
+  }
+  const engine = getDatabaseEngine();
+  if (engine === 'postgres') {
+    return createPostgresRepository(getPostgresPool());
+  }
   if (!defaultRepositoryInstance) {
     defaultRepositoryInstance = createRepository();
   }
@@ -1432,5 +1454,6 @@ function getRepository(db) {
 
 module.exports = {
   createRepository,
+  createPostgresRepository,
   getRepository
 };

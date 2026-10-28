@@ -231,6 +231,53 @@ const POSTGRES_MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_cashier_logs_merchantId ON cashier_logs("merchantId");
       CREATE INDEX IF NOT EXISTS idx_transactions_cashierId ON transactions("cashierId");
     `
+  },
+  {
+    version: 6,
+    name: 'admin_audit_trail_and_support_queries',
+    sql: `
+      -- 1. Administrative Audit Trail
+      CREATE TABLE IF NOT EXISTS admin_audit_trail (
+        id VARCHAR(64) PRIMARY KEY,
+        "actorId" VARCHAR(64) NOT NULL,
+        "actorEmail" VARCHAR(255) NOT NULL,
+        "actorRole" VARCHAR(64) NOT NULL,
+        action VARCHAR(80) NOT NULL,
+        "targetType" VARCHAR(50) NOT NULL,
+        "targetId" VARCHAR(80),
+        "reasonCode" VARCHAR(50) NOT NULL,
+        justification TEXT NOT NULL,
+        "beforeState" TEXT,
+        "afterState" TEXT,
+        "correlationId" VARCHAR(80),
+        "ipAddress" VARCHAR(45),
+        outcome VARCHAR(32) NOT NULL CHECK(outcome IN ('success', 'denied', 'failed')),
+        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      -- 2. Support Queries
+      CREATE TABLE IF NOT EXISTS support_queries (
+        id VARCHAR(64) PRIMARY KEY,
+        "merchantId" VARCHAR(64) NOT NULL REFERENCES merchants(id) ON DELETE CASCADE,
+        category VARCHAR(64) NOT NULL,
+        subject VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        status VARCHAR(32) NOT NULL DEFAULT 'open',
+        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      -- 3. Ensure admin_users has lastLoginAt and active columns
+      ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS "lastLoginAt" TIMESTAMPTZ;
+      ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE;
+
+      -- 4. Indexes
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_trail_actorId ON admin_audit_trail("actorId");
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_trail_action ON admin_audit_trail(action);
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_trail_targetId ON admin_audit_trail("targetId");
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_trail_createdAt ON admin_audit_trail("createdAt");
+      CREATE INDEX IF NOT EXISTS idx_support_queries_merchantId ON support_queries("merchantId");
+      CREATE INDEX IF NOT EXISTS idx_support_queries_createdAt ON support_queries("createdAt");
+    `
   }
 ];
 
