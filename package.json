@@ -32,6 +32,7 @@
   "engines": {
     "node": ">=20"
   },
+  "packageManager": "pnpm@9.15.4",
   "dependencies": {
     "pg": "^8.23.1",
     "qrcode": "^1.5.4"

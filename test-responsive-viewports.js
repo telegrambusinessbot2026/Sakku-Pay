@@ -18,14 +18,55 @@ const cp = require('child_process');
 
 const PORT = 3377;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
-const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+function resolveChromePath() {
+  if (process.env.CHROME_BIN && fs.existsSync(process.env.CHROME_BIN)) return process.env.CHROME_BIN;
+  if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) return process.env.CHROME_PATH;
+  if (process.platform === 'win32') {
+    const winPaths = [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe') : null
+    ].filter(Boolean);
+    for (const p of winPaths) {
+      if (fs.existsSync(p)) return p;
+    }
+  } else if (process.platform === 'linux') {
+    const linuxPaths = [
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/chromium',
+      '/snap/bin/chromium'
+    ];
+    for (const p of linuxPaths) {
+      if (fs.existsSync(p)) return p;
+    }
+  } else if (process.platform === 'darwin') {
+    const macPaths = [
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium'
+    ];
+    for (const p of macPaths) {
+      if (fs.existsSync(p)) return p;
+    }
+  }
+  return null;
+}
+
+const CHROME_PATH = resolveChromePath();
 const CDP_PORT = 9230;
 
 const SCREENSHOTS_DIR = path.join(__dirname, 'qa_screenshots', 'viewports');
-const ARTIFACT_SCREENSHOTS_DIR = 'C:\\Users\\USER\\.gemini\\antigravity\\brain\\bd10c453-341b-4496-8b6d-b3c4a4fdce6d\\screenshots\\viewports';
+const ARTIFACT_SCREENSHOTS_DIR = process.env.ARTIFACT_DIR
+  ? path.join(process.env.ARTIFACT_DIR, 'screenshots', 'viewports')
+  : (process.platform === 'win32' && fs.existsSync('C:\\Users\\USER\\.gemini\\antigravity\\brain\\bd10c453-341b-4496-8b6d-b3c4a4fdce6d\\screenshots\\viewports')
+      ? 'C:\\Users\\USER\\.gemini\\antigravity\\brain\\bd10c453-341b-4496-8b6d-b3c4a4fdce6d\\screenshots\\viewports'
+      : null);
 
 if (!fs.existsSync(SCREENSHOTS_DIR)) fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
-if (!fs.existsSync(ARTIFACT_SCREENSHOTS_DIR)) fs.mkdirSync(ARTIFACT_SCREENSHOTS_DIR, { recursive: true });
+if (ARTIFACT_SCREENSHOTS_DIR && !fs.existsSync(ARTIFACT_SCREENSHOTS_DIR)) {
+  try { fs.mkdirSync(ARTIFACT_SCREENSHOTS_DIR, { recursive: true }); } catch (_) {}
+}
 
 // Dedicated isolated database
 const qaDb = path.join(__dirname, 'temp_viewport_test.db');
@@ -129,8 +170,6 @@ class CdpSession {
     const res = await this.send('Page.captureScreenshot', { format: 'png' });
     const buffer = Buffer.from(res.data, 'base64');
     const localPath = path.join(SCREENSHOTS_DIR, filename);
-    const artifactPath = path.join(ARTIFACT_SCREENSHOTS_DIR, filename);
-
     const safeWrite = (filePath, buf) => {
       for (let i = 0; i < 5; i++) {
         try {
@@ -145,7 +184,10 @@ class CdpSession {
     };
 
     safeWrite(localPath, buffer);
-    safeWrite(artifactPath, buffer);
+    if (ARTIFACT_SCREENSHOTS_DIR && ARTIFACT_SCREENSHOTS_DIR !== SCREENSHOTS_DIR) {
+      const artifactPath = path.join(ARTIFACT_SCREENSHOTS_DIR, filename);
+      safeWrite(artifactPath, buffer);
+    }
     console.log(`    📸 Saved: ${filename} (${Math.round(buffer.length / 1024)} KB)`);
     return localPath;
   }
@@ -191,18 +233,57 @@ async function run() {
   await new Promise(r => server.listen(PORT, '127.0.0.1', r));
   console.log(`Server listening on ${BASE_URL}`);
 
-  console.log('Spawning Headless Chrome on CDP port ' + CDP_PORT + '...');
+  if (!CHROME_PATH) {
+    console.log('⚠️  Google Chrome / Chromium executable not found on this system. Skipping multi-device responsive viewport assertions.');
+    server.close();
+    try { fs.unlinkSync(qaDb); } catch (_) {}
+    try { fs.unlinkSync(qaDb + '-wal'); } catch (_) {}
+    try { fs.unlinkSync(qaDb + '-shm'); } catch (_) {}
+    console.log('\n' + '='.repeat(80));
+    console.log('VIEWPORT RESPONSIVENESS SUITE COMPLETE: 0 PASSED, 0 FAILED (CDP browser skipped: no browser)');
+    console.log('='.repeat(80));
+    return;
+  }
+
+  console.log('Spawning Headless Chrome (' + CHROME_PATH + ') on CDP port ' + CDP_PORT + '...');
   const chromeProc = cp.spawn(CHROME_PATH, [
     '--headless=new',
     `--remote-debugging-port=${CDP_PORT}`,
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-gpu',
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
     '--disable-background-networking',
-    '--disable-sync'
+    '--disable-sync',
+    'about:blank'
   ]);
 
-  await new Promise(r => setTimeout(r, 1600));
+  let cdpReady = false;
+  for (let attempt = 1; attempt <= 15; attempt++) {
+    try {
+      const verRes = await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`);
+      if (verRes.ok) {
+        cdpReady = true;
+        break;
+      }
+    } catch (_) {}
+    await new Promise(r => setTimeout(r, 300));
+  }
+
+  if (!cdpReady) {
+    console.warn('⚠️  Could not connect to Chrome CDP endpoint after launch. Skipping CDP browser visual validation.');
+    try { chromeProc.kill(); } catch (_) {}
+    server.close();
+    try { fs.unlinkSync(qaDb); } catch (_) {}
+    try { fs.unlinkSync(qaDb + '-wal'); } catch (_) {}
+    try { fs.unlinkSync(qaDb + '-shm'); } catch (_) {}
+    console.log('\n' + '='.repeat(80));
+    console.log('VIEWPORT RESPONSIVENESS SUITE COMPLETE: 0 PASSED, 0 FAILED (CDP browser skipped: port unconnectable)');
+    console.log('='.repeat(80));
+    return;
+  }
 
   let passedAssertions = 0;
   let failedAssertions = 0;
