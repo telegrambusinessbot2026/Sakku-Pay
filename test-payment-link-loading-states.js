@@ -81,7 +81,10 @@ try {
   if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
   if (fs.existsSync(testDbPath + '-wal')) fs.unlinkSync(testDbPath + '-wal');
   if (fs.existsSync(testDbPath + '-shm')) fs.unlinkSync(testDbPath + '-shm');
-  fs.copyFileSync(path.join(__dirname, 'data.json'), testDataJson);
+  const sourceDataJson = fs.existsSync(path.join(__dirname, 'data.json'))
+    ? path.join(__dirname, 'data.json')
+    : path.join(__dirname, 'data.json.example');
+  fs.copyFileSync(sourceDataJson, testDataJson);
 } catch (_) {}
 
 process.env.DB_PATH = testDbPath;

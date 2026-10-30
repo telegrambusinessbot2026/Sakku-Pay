@@ -43,6 +43,12 @@ jobs:
       - name: Install Project Dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Initialize Test Data Store
+        run: |
+          if [ ! -f data.json ]; then
+            cp data.json.example data.json
+          fi
+
       - name: Run PostgreSQL Persistence & Safety Suite
         env:
           DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/sakkupay_ci_test
@@ -56,13 +62,7 @@ jobs:
         run: node test-postgres-real-integration.js
 
       - name: Run Complete Automated Test Suite (Milestones 1 to 6)
-        run: |
-          node test-milestone1.js
-          node test-milestone2.js
-          node test-milestone3.js
-          node test-milestone4.js
-          node test-milestone5.js
-          node test-milestone6.js
+        run: node run_all_milestones.js
 
       - name: Run Cashier & Merchant Suites
         run: |

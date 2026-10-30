@@ -22,7 +22,10 @@ const TEST_DATA_JSON = path.join(__dirname, 'temp_test_fixes_data.json');
 if (fs.existsSync(TEST_DB_PATH)) fs.unlinkSync(TEST_DB_PATH);
 if (fs.existsSync(TEST_DB_PATH + '-wal')) fs.unlinkSync(TEST_DB_PATH + '-wal');
 if (fs.existsSync(TEST_DB_PATH + '-shm')) fs.unlinkSync(TEST_DB_PATH + '-shm');
-fs.copyFileSync(path.join(__dirname, 'data.json'), TEST_DATA_JSON);
+const sourceDataJson = fs.existsSync(path.join(__dirname, 'data.json'))
+  ? path.join(__dirname, 'data.json')
+  : path.join(__dirname, 'data.json.example');
+fs.copyFileSync(sourceDataJson, TEST_DATA_JSON);
 
 process.env.DB_PATH = TEST_DB_PATH;
 process.env.DATA_JSON_PATH = TEST_DATA_JSON;

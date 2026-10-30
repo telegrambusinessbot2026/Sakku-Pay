@@ -84,7 +84,9 @@ async function runMilestone2Tests() {
   console.log('SakkuPay Milestone 2: SQLite Migration & Repository Layer Test Suite');
   console.log('==============================================================================\n');
 
-  const jsonStorePath = path.join(__dirname, 'data.json');
+  const jsonStorePath = fs.existsSync(path.join(__dirname, 'data.json'))
+    ? path.join(__dirname, 'data.json')
+    : path.join(__dirname, 'data.json.example');
   const sourceBytes = fs.readFileSync(jsonStorePath);
   const sourceSha256 = crypto.createHash('sha256').update(sourceBytes).digest('hex');
   const sourceData = JSON.parse(sourceBytes.toString('utf8'));
