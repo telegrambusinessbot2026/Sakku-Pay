@@ -28,38 +28,21 @@ function getResolvedDbPath() {
 function validateDatabaseConfiguration() {
   const isProduction = process.env.NODE_ENV === 'production';
   const hasDatabaseUrl = Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.trim());
-  const hasPersistentDisk = Boolean(process.env.DB_PATH && process.env.DB_PATH.trim());
 
-  if (isProduction && !hasDatabaseUrl && !hasPersistentDisk) {
+  if (isProduction && !hasDatabaseUrl) {
     const errorMsg = [
       'CRITICAL [SakkuPay Production Database Validation Failed]:',
-      'Production deployment requires durable persistence to prevent data loss across container restarts.',
-      'Configure either:',
-      '  1. DB_PATH: Absolute path to a mounted Render Persistent Disk (e.g., /var/data/sakkupay.db) [Recommended for current synchronous SQLite architecture]',
-      '  2. DATABASE_URL: Managed PostgreSQL connection string (Requires completing async repository layer)',
-      'Silent fallback to an unmounted, ephemeral database is strictly prohibited.'
+      'Production deployment strictly requires DATABASE_URL to connect to managed PostgreSQL.',
+      'Silent fallback to SQLite, in-memory (:memory:), or JSON storage in production is prohibited.',
+      'Please configure DATABASE_URL in your hosting environment settings (e.g., Render Managed PostgreSQL Internal/External URL).'
     ].join('\n');
     console.error(errorMsg);
-    throw new Error('Missing required persistent database configuration in production.');
-  }
-
-  if (isProduction && hasPersistentDisk && !hasDatabaseUrl) {
-    const configuredPath = process.env.DB_PATH.trim();
-    if (!path.isAbsolute(configuredPath)) {
-      const errorMsg = [
-        'CRITICAL [SakkuPay Production Database Validation Failed]:',
-        `DB_PATH "${configuredPath}" is a relative path.`,
-        'In production on Render, DB_PATH must be an absolute path pointing to a mounted persistent volume (e.g., /var/data/sakkupay.db).',
-        'Relative paths reside on ephemeral container storage that resets on every redeployment.'
-      ].join('\n');
-      console.error(errorMsg);
-      throw new Error('In production, DB_PATH must be an absolute path to a mounted persistent disk.');
-    }
+    throw new Error('Missing required persistent database configuration in production: DATABASE_URL must be configured.');
   }
 
   return {
     engine: hasDatabaseUrl ? 'postgres' : 'sqlite',
-    isPersistent: isProduction ? (hasDatabaseUrl || hasPersistentDisk) : true
+    isPersistent: isProduction ? hasDatabaseUrl : true
   };
 }
 
@@ -96,7 +79,16 @@ function createDatabaseConnection(customPath) {
   // Validate persistence configuration before opening or creating database
   validateDatabaseConfiguration();
 
+  const isProduction = process.env.NODE_ENV === 'production';
   const isMemory = customPath === ':memory:';
+
+  if (isProduction) {
+    if (isMemory) {
+      throw new Error('CRITICAL [SakkuPay Security]: In-memory SQLite (:memory:) is strictly prohibited in production.');
+    }
+    throw new Error('CRITICAL [SakkuPay Security]: Direct SQLite runtime connections are prohibited in production. Configure DATABASE_URL for PostgreSQL.');
+  }
+
   const targetPath = isMemory ? ':memory:' : (customPath ? path.resolve(customPath) : getResolvedDbPath());
 
   if (!isMemory) {

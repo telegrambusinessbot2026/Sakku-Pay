@@ -1,0 +1,69 @@
+name: Real PostgreSQL Integration & Test Suite
+
+on:
+  push:
+    branches: [ main, 'feat/**', 'fix/**', 'release/**' ]
+  pull_request:
+    branches: [ main, 'feat/**' ]
+  workflow_dispatch:
+
+jobs:
+  test-postgres:
+    name: Real PostgreSQL 16 Integration & Verification
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_DB: sakkupay_ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Project Dependencies
+        run: npm install
+
+      - name: Run PostgreSQL Persistence & Safety Suite
+        run: node test-postgres-database-persistence.js
+
+      - name: Run Real PostgreSQL Integration Suite (Live Container)
+        env:
+          DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/sakkupay_ci_test
+          NODE_ENV: test
+        run: node test-postgres-real-integration.js
+
+      - name: Run Complete Automated Test Suite (Milestones 1 to 6)
+        run: |
+          node test-milestone1.js
+          node test-milestone2.js
+          node test-milestone3.js
+          node test-milestone4.js
+          node test-milestone5.js
+          node test-milestone6.js
+
+      - name: Run Cashier & Merchant Suites
+        run: |
+          node test-cashier-pairing-suite.js
+          node test-companion-download-auth.js
+          node test-master-upgrade-suite.js
+          node test-merchant-fixes.js
+          node test-dashboard-navigation-and-profile.js
+          node test-payment-link-loading-states.js
+          node test-responsive-viewports.js

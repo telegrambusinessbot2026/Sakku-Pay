@@ -38,30 +38,27 @@ async function runTests() {
   // --------------------------------------------------------------------------
   console.log('\n--- Section 1: Production Startup & Safety Validation ---');
 
-  // 1. Missing both DATABASE_URL and DB_PATH in production must fail
+  // 1. Missing DATABASE_URL in production must fail
   {
     const oldEnv = process.env.NODE_ENV;
     const oldDbUrl = process.env.DATABASE_URL;
-    const oldDbPath = process.env.DB_PATH;
 
     process.env.NODE_ENV = 'production';
     delete process.env.DATABASE_URL;
-    delete process.env.DB_PATH;
 
     let threw = false;
     try {
       validateDatabaseConfiguration();
     } catch (e) {
       threw = true;
-      assert(e.message.includes('Missing required persistent database configuration in production'));
+      assert(e.message.includes('DATABASE_URL must be configured'));
     } finally {
       process.env.NODE_ENV = oldEnv;
       if (oldDbUrl) process.env.DATABASE_URL = oldDbUrl;
-      if (oldDbPath) process.env.DB_PATH = oldDbPath;
     }
 
-    assert(threw, 'Production startup without DATABASE_URL or DB_PATH must throw');
-    pass('Production startup without persistent DB configuration throws fatal error and rejects ephemeral fallback');
+    assert(threw, 'Production startup without DATABASE_URL must throw');
+    pass('Production startup without DATABASE_URL throws fatal error and rejects ephemeral fallback');
   }
 
   // 2. Production with DATABASE_URL passes and detects postgres engine
@@ -84,51 +81,46 @@ async function runTests() {
     pass('Production startup with DATABASE_URL selects PostgreSQL engine with persistence enabled');
   }
 
-  // 3. Production with DB_PATH passes for persistent disk
+  // 3. In-memory SQLite (:memory:) in production is strictly blocked
   {
     const oldEnv = process.env.NODE_ENV;
-    const oldDbPath = process.env.DB_PATH;
-
-    process.env.NODE_ENV = 'production';
-    delete process.env.DATABASE_URL;
-    process.env.DB_PATH = '/var/data/sakkupay.db';
-
-    const res = validateDatabaseConfiguration();
-    assert.strictEqual(res.engine, 'sqlite');
-    assert.strictEqual(res.isPersistent, true);
-
-    process.env.NODE_ENV = oldEnv;
-    if (oldDbPath) process.env.DB_PATH = oldDbPath;
-    else delete process.env.DB_PATH;
-
-    pass('Production startup with DB_PATH selects persistent disk volume');
-  }
-
-  // 4. Production with relative DB_PATH must fail (Render ephemeral container protection)
-  {
-    const oldEnv = process.env.NODE_ENV;
-    const oldDbPath = process.env.DB_PATH;
     const oldDbUrl = process.env.DATABASE_URL;
 
     process.env.NODE_ENV = 'production';
-    delete process.env.DATABASE_URL;
-    process.env.DB_PATH = './sakkupay.db';
+    process.env.DATABASE_URL = 'postgres://sakku_admin:dummy_pass@dpg-managed-db.render.com:5432/sakkupay_prod';
 
     let threw = false;
     try {
-      validateDatabaseConfiguration();
+      createDatabaseConnection(':memory:');
     } catch (e) {
       threw = true;
-      assert(e.message.includes('absolute path'));
+      assert(e.message.includes('strictly prohibited in production'));
     } finally {
       process.env.NODE_ENV = oldEnv;
-      if (oldDbPath) process.env.DB_PATH = oldDbPath;
-      else delete process.env.DB_PATH;
       if (oldDbUrl) process.env.DATABASE_URL = oldDbUrl;
+      else delete process.env.DATABASE_URL;
     }
 
-    assert(threw, 'Production startup with relative DB_PATH must throw');
-    pass('Production startup with relative DB_PATH rejects ephemeral container disk');
+    assert(threw, 'In-memory SQLite in production must throw');
+    pass('Production startup strictly blocks in-memory SQLite (:memory:) execution');
+  }
+
+  // 4. Local development mode allows SQLite
+  {
+    const oldEnv = process.env.NODE_ENV;
+    const oldDbUrl = process.env.DATABASE_URL;
+
+    process.env.NODE_ENV = 'development';
+    delete process.env.DATABASE_URL;
+
+    const res = validateDatabaseConfiguration();
+    assert.strictEqual(res.engine, 'sqlite');
+    assert.strictEqual(getDatabaseEngine(), 'sqlite');
+
+    process.env.NODE_ENV = oldEnv;
+    if (oldDbUrl) process.env.DATABASE_URL = oldDbUrl;
+
+    pass('Development mode permits local SQLite driver');
   }
 
   // --------------------------------------------------------------------------

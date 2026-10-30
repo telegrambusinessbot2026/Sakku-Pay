@@ -279,10 +279,10 @@ SakkuPay features a genuine dual-driver database architecture with zero dual-sta
 - Synchronous prepared statements provide microsecond query latency.
 - In-memory SQLite (`:memory:`) fully supported for rapid isolated test execution.
 
-### 2. Production Persistence on Render
-Render Web Services run stateless Docker containers that reset their local filesystems on every redeploy. SakkuPay supports two production-ready, durable persistence architectures:
+### 2. Production Persistence on Render (Managed PostgreSQL Required)
+Render Web Services run stateless Docker containers that reset their local filesystems on every redeploy. In production (`NODE_ENV=production`), SakkuPay enforces strict PostgreSQL database persistence:
 
-- **Option A: Managed PostgreSQL via `DATABASE_URL` (Recommended for Cloud Scale)**
+- **Managed PostgreSQL via `DATABASE_URL` (Production Standard):**
   - Provision a separate Render PostgreSQL Database Service.
   - Set `DATABASE_URL` to the connection string (e.g. `postgresql://sakkupay:...@dpg-xxx-a:5432/sakkupay_db`).
   - SakkuPay automatically detects `getDatabaseEngine() === 'postgres'` and runs pure PostgreSQL.
@@ -293,13 +293,8 @@ Render Web Services run stateless Docker containers that reset their local files
   - Production SSL auto-negotiation (`ssl: { rejectUnauthorized: false }`) accommodates Render self-signed certificates.
   - Zero dual-state fallback: when `DATABASE_URL` is set, SQLite is completely bypassed and `data.json` persistence is disabled.
 
-- **Option B: Render Persistent Disk with SQLite**
-  - Attach a Render Persistent Disk mounted at `/var/data`.
-  - Set `DB_PATH=/var/data/sakkupay.db`.
-  - Operates using the native SQLite WAL driver on durable network-attached block storage.
-
 ### 3. Production Startup Guard
-[`server.js`](file:///D:/SakkuPay/server.js) enforces a strict boot-time check: when `NODE_ENV === 'production'`, the server throws a fatal exception and halts if neither `DATABASE_URL` nor an absolute `DB_PATH` is configured. Ephemeral container storage is strictly rejected.
+[`server.js`](file:///D:/SakkuPay/server.js) enforces a strict boot-time check: when `NODE_ENV === 'production'`, the server throws a fatal exception and halts if `DATABASE_URL` is missing. Silent fallback to SQLite, `:memory:`, or ephemeral disk storage in production is strictly rejected.
 
 ---
 
@@ -344,15 +339,15 @@ run().catch(err => { console.error('Migration failed:', err); process.exit(1); }
 
 ## 🚢 Render Deployment Preparation Checklist
 
-Before deploying SakkuPay to Render, select your persistence architecture and complete the following steps:
+Before deploying SakkuPay to Render, complete the following steps:
 
-### Option 1: Managed PostgreSQL Deployment (Recommended)
+### Production PostgreSQL Deployment on Render
 - [ ] **1. Create Render PostgreSQL Service:**
   - In Render Dashboard, click **New +** -> **PostgreSQL**.
-  - Name: `sakkupay-db`, Region: `Oregon` (or matching Web Service region).
-  - Note the **Internal Database URL** (for Render Web Services) or **External Database URL**.
+  - Name: `sakkupay-db`, Region: `Oregon` (or matching your Web Service region).
+  - Note the **Internal Database URL** (for Render Web Services) or **External Database URL** (for external tools/migrations).
 - [ ] **2. Configure Web Service Environment Variables on Render:**
-  - `NODE_ENV`: `production`
+  - `NODE_ENV`: `production` (Enforces PostgreSQL persistence and secret guards)
   - `PORT`: (Auto-injected by Render, leave unset)
   - `APP_URL`: `https://sakkupay.onrender.com`
   - `TRUST_PROXY`: `true`
@@ -362,15 +357,11 @@ Before deploying SakkuPay to Render, select your persistence architecture and co
   - `ADMIN_USERNAME`: Custom administrative username
   - `ADMIN_PASSWORD`: Strong password of 12+ characters
   - `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET`: Configured in Google Cloud Console with authorized redirect URI `https://sakkupay.onrender.com/api/auth/google/callback`.
-- [ ] **3. (Optional) Migrate Existing SQLite Data:**
-  - If existing data is in a local `sakkupay.db`, execute `src/db/migrateSqliteToPostgres.js` pointing to the Render External Database URL before cutover.
-
-### Option 2: Render Persistent Disk with SQLite
-- [ ] **1. Attach Render Persistent Disk to Web Service:**
-  - In your Render Web Service dashboard, navigate to **Disks** -> click **Add Disk**.
-  - Name: `sakkupay-data`, Mount Path: `/var/data` (Must be an absolute path), Size: `1 GB`.
-- [ ] **2. Configure Environment Variables:**
-  - Set `DB_PATH=/var/data/sakkupay.db` and leave `DATABASE_URL` empty.
+- [ ] **3. (Optional) Migrate Existing SQLite Data to PostgreSQL:**
+  - If existing data is in a local `sakkupay.db`, execute `src/db/migrateSqliteToPostgres.js` pointing to the Render External Database URL before cutover:
+    ```bash
+    node -e "require('./src/db/migrateSqliteToPostgres').migrateSqliteToPostgres('sakkupay.db', process.env.EXTERNAL_DATABASE_URL)"
+    ```
 
 ### Android Companion Verification:
 - [ ] **Sideload & Test Companion APK:**
@@ -388,8 +379,8 @@ Before deploying SakkuPay to Render, select your persistence architecture and co
 | `PORT` | All | Optional | `3000` | HTTP port the server binds to (injected by Render). |
 | `APP_URL` | All | Rec. | `http://localhost:3000` | Canonical base URL used for checkout payment link generation. |
 | `TRUST_PROXY` | Prod | Rec. | `false` (set `true` in prod) | Trusts `X-Forwarded-For` header from Render/Cloudflare proxies. |
-| `DB_PATH` | Local/Disk | Yes* | `./sakkupay.db` | Path to SQLite database file (*required if `DATABASE_URL` is omitted). |
-| `DATABASE_URL` | Prod | Yes* | `postgresql://user:pass@host/db` | Connection string for managed PostgreSQL (*required if `DB_PATH` is omitted). |
+| `DATABASE_URL` | Prod | Yes | `postgresql://user:pass@host/db` | Connection string for managed PostgreSQL (**strictly required in production**). |
+| `DB_PATH` | Local/Dev | Dev | `./sakkupay.db` | Path to SQLite database file (used in local development and legacy migration). |
 | `DB_POOL_MAX` | Prod | Optional | `20` | Maximum connections for PostgreSQL pool. |
 | `SAKKUPAY_TOKEN_SECRET` | All | Yes | 32+ char random string | HMAC-SHA256 signing secret for session tokens. |
 | `VAULT_SECRET` | All | Yes | 32+ char random string | AES-256-GCM secret for encrypting gateway salt keys. |

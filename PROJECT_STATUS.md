@@ -77,8 +77,8 @@ This document provides a factual, code-inspected audit of all features in SakkuP
 | **PostgreSQL Schema Migrations** | **Complete** | [`src/db/postgresSchema.js`](file:///D:/SakkuPay/src/db/postgresSchema.js) provides 6 sequential, versioned DDL migrations with integer paise precision (`BIGINT`), indexes, and RBAC / audit tables. |
 | **Async PostgreSQL Repository** | **Complete** | [`src/db/postgresRepository.js`](file:///D:/SakkuPay/src/db/postgresRepository.js) provides an asynchronous repository implementing all 14 namespaces with parameterized queries (`$1, $2, ...`), double-quoted identifiers, and `withTransaction` isolation. |
 | **Atomic Data Migration Engine** | **Complete** | [`src/db/migrateSqliteToPostgres.js`](file:///D:/SakkuPay/src/db/migrateSqliteToPostgres.js) creates an automated snapshot backup, applies migrations 1–6, transfers all 14 tables inside an atomic PostgreSQL transaction, and verifies row count and sum of `amount_paise` parity before committing. |
-| **Runtime Persistence on Render** | **Resolved (Production-Ready)** | **Dual Persistence Options Supported:**<br>1. **Managed PostgreSQL (`DATABASE_URL`):** Setting `DATABASE_URL` activates pure PostgreSQL mode. On startup, migrations 1–6 execute automatically, seeding the default SuperAdmin if needed. `data.json` and SQLite are completely bypassed.<br>2. **Render Persistent Disk (`DB_PATH`):** Mounting a Render Persistent Disk at `/var/data` with `DB_PATH=/var/data/sakkupay.db` enables durable SQLite WAL storage.<br>`validateDatabaseConfiguration()` strictly enforces that either `DATABASE_URL` or an absolute persistent `DB_PATH` is configured in production. |
-| **Startup Persistence Guard** | **Complete** | [`server.js`](file:///D:/SakkuPay/server.js#L91-L95) explicitly throws and halts boot in production if neither `DATABASE_URL` nor persistent `DB_PATH` is configured. |
+| **Runtime Persistence on Render** | **Resolved (PostgreSQL Production Gate)** | **Strict PostgreSQL Enforcement in Production:**<br>Setting `NODE_ENV=production` mandates `DATABASE_URL`. On boot, `server.js` verifies migrations 1–6 and seeds the primary SuperAdmin if empty. Direct SQLite connections, in-memory databases, and JSON persistence are strictly rejected in production.<br>SQLite is preserved exclusively for local development, unit tests, and the offline migration tool. |
+| **Startup Persistence Guard** | **Complete** | [`server.js`](file:///D:/SakkuPay/server.js) explicitly throws and halts boot in production if `DATABASE_URL` is missing. |
 
 ---
 
@@ -118,15 +118,16 @@ All 14 test suites in the repository were executed and verified:
 | `test-merchant-fixes.js` | 59 | **PASSED** | Public checkout routing, templates, support ticket tracking |
 | `test-payment-link-loading-states.js` | 33 | **PASSED** | Visual checkout states, error recovery, inactive link badges |
 | `test-responsive-viewports.js` | 56 | **PASSED** | 7 viewports (360px to 1920px) across Home, Login, Checkout, Admin |
-| **Cumulative Total** | **698** | **100% PASSED** | **Zero Failures Across Entire Codebase** |
+| `test-postgres-real-integration.js` | CI Live | **Configured** | Real PostgreSQL 16 container in GitHub Actions CI (`.github/workflows/postgres-integration.yml`) exercises real DDL migrations 1–6, constraints, foreign keys, transactions, and paise parity |
+| **Cumulative Local Tests** | **698** | **100% PASSED** | **Zero Failures Across Entire Codebase** |
 
 ---
 
 ## 4. Known Limitations & Blockers Before Production Deployment
 
-1. **Production Infrastructure Not Provisioned**:
+1. **Production Infrastructure Provisioning on Render**:
    - The production Render service is currently running an earlier build.
-   - User action required: Provision a Render PostgreSQL Database Service and attach its `DATABASE_URL` (or attach a Render Persistent Disk at `DB_PATH=/var/data/sakkupay.db`).
+   - User action required: Provision a Render PostgreSQL Database Service (`sakkupay-db`), copy its Internal Database URL, and set `DATABASE_URL` in the Render Web Service environment variables.
 2. **Physical Android Device Testing Required**:
    - The Companion APK binary is release-signed, but physical testing on Android 13/14/15 is necessary to guide users through the "Restricted Settings" dialog (which Android applies to sideloaded notification listeners).
 3. **Google OAuth Production Redirect URI**:

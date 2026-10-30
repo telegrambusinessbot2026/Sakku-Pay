@@ -17,6 +17,7 @@
     "test": "node run_all_milestones.js",
     "test:cashier": "node test-cashier-pairing-suite.js",
     "test:persistence": "node test-postgres-database-persistence.js",
+    "test:pg-real": "node test-postgres-real-integration.js",
     "test:companion": "node test-companion-download-auth.js",
     "test:dashboard": "node test-dashboard-navigation-and-profile.js",
     "test:merchant": "node test-merchant-fixes.js",
