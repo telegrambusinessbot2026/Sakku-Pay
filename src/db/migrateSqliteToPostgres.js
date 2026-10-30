@@ -49,9 +49,35 @@ async function migrateSqliteToPostgres(sqliteSource, pgClientOrPool, options = {
     throw new Error('Invalid SQLite source: expected database file path or DatabaseSync connection.');
   }
 
-  // 2. Acquire PostgreSQL client (if pool provided)
-  const isPool = typeof pgClientOrPool.connect === 'function';
-  const pgClient = isPool ? await pgClientOrPool.connect() : pgClientOrPool;
+  // 2. Acquire PostgreSQL client (supports Pool, Client/PoolClient, or connection string)
+  let pgClient;
+  let clientToRelease = null;
+  let poolToClose = null;
+
+  if (typeof pgClientOrPool === 'string') {
+    const { getPostgresPool } = require('./connection');
+    poolToClose = getPostgresPool(pgClientOrPool);
+    pgClient = await poolToClose.connect();
+    clientToRelease = pgClient;
+  } else if (pgClientOrPool && typeof pgClientOrPool.connect === 'function' && typeof pgClientOrPool.release !== 'function') {
+    // A pg.Pool instance was provided
+    pgClient = await pgClientOrPool.connect();
+    clientToRelease = pgClient;
+  } else if (pgClientOrPool && typeof pgClientOrPool.query === 'function') {
+    // An existing pg.Client or PoolClient (or test mock) was provided
+    pgClient = pgClientOrPool;
+    if (typeof pgClient.connect === 'function' && !pgClient._connected && pgClient._connecting !== true) {
+      try {
+        await pgClient.connect();
+      } catch (err) {
+        if (!err.message?.includes('already been connected')) {
+          throw err;
+        }
+      }
+    }
+  } else {
+    throw new Error('Invalid PostgreSQL client, pool, or connection string provided.');
+  }
 
   try {
     // 3. Ensure all 6 migrations are applied to target PostgreSQL database
@@ -383,8 +409,15 @@ async function migrateSqliteToPostgres(sqliteSource, pgClientOrPool, options = {
         sqliteDb.close();
       } catch (_) {}
     }
-    if (isPool) {
-      pgClient.release();
+    if (clientToRelease && typeof clientToRelease.release === 'function') {
+      try {
+        clientToRelease.release();
+      } catch (_) {}
+    }
+    if (poolToClose && typeof poolToClose.end === 'function') {
+      try {
+        await poolToClose.end();
+      } catch (_) {}
     }
   }
 }
