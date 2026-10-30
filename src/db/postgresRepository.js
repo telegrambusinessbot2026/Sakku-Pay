@@ -788,6 +788,9 @@ function createPostgresRepository(clientOrPool = getPostgresPool()) {
         ]);
         return mapTransaction(res.rows[0]);
       },
+      async updateVerified(id, partial) {
+        return this.update(id, partial);
+      },
       async delete(id) {
         const res = await clientOrPool.query('DELETE FROM transactions WHERE id = $1', [id]);
         return (res.rowCount || 0) > 0;
@@ -1441,6 +1444,9 @@ function createPostgresRepository(clientOrPool = getPostgresPool()) {
         const res = await clientOrPool.query('SELECT * FROM support_queries WHERE "merchantId" = $1 ORDER BY "createdAt" DESC', [merchantId]);
         return res.rows.map(mapSupportQuery);
       },
+      async listByMerchant(merchantId) {
+        return this.findByMerchant(merchantId);
+      },
       async listAll(limit = 100) {
         const res = await clientOrPool.query('SELECT * FROM support_queries ORDER BY "createdAt" DESC LIMIT $1', [limit]);
         return res.rows.map(mapSupportQuery);
@@ -1632,6 +1638,9 @@ function createPostgresRepository(clientOrPool = getPostgresPool()) {
           [merchantId, limit]
         );
         return res.rows.map(mapCashierLog);
+      },
+      async listByMerchant(merchantId, limit = 50) {
+        return this.findByMerchant(merchantId, limit);
       },
       async findByCashier(cashierId, limit = 50) {
         if (!cashierId) return [];

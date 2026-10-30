@@ -256,7 +256,7 @@ async function run() {
       details: 'Counter 1 paired via Android Companion App',
       ipAddress: '127.0.0.1'
     });
-    const logs = await repo.cashierLogs.listByMerchant(merchantA.id);
+    const logs = await (repo.cashierLogs.findByMerchant || repo.cashierLogs.listByMerchant).call(repo.cashierLogs, merchantA.id);
     assert.strictEqual(logs.length, 1);
     assert.strictEqual(logs[0].event, 'cashier_paired');
     pass('Real PG: Cashier event logged and attributed');
@@ -278,7 +278,7 @@ async function run() {
     pass('Real PG: Transaction created with exact paise, pending status & cashierId attribution');
 
     // Settle payment with UTR
-    const settledTx = await repo.transactions.updateVerified(tx1.id, {
+    const settledTx = await (repo.transactions.update || repo.transactions.updateVerified).call(repo.transactions, tx1.id, {
       status: 'success',
       utr: '123456789012',
       verifiedBy: 'android-companion',
@@ -335,7 +335,7 @@ async function run() {
       message: 'Please confirm settlement timestamp',
       status: 'open'
     });
-    const queries = await repo.supportQueries.listByMerchant(merchantA.id);
+    const queries = await (repo.supportQueries.findByMerchant || repo.supportQueries.listByMerchant).call(repo.supportQueries, merchantA.id);
     assert.strictEqual(queries.length, 1);
     assert.strictEqual(queries[0].subject, 'Inquiry regarding batch 499950');
     pass('Real PG: Support queries stored and retrieved');
