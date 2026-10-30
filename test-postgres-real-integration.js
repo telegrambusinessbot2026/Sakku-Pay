@@ -528,6 +528,7 @@ if (require.main === module) {
       process.exit(0);
     }
   }).catch(err => {
+    console.error('::error::Fatal error in real PostgreSQL integration suite: ' + (err?.stack || err?.message || err));
     console.error('Fatal error in real PostgreSQL integration suite:', err);
     process.exit(1);
   });

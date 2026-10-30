@@ -337,22 +337,14 @@ async function migrateSqliteToPostgres(sqliteSource, pgClientOrPool, options = {
     }
 
     // 6. Record Parity Verification
+    // 6. Record Parity Verification (sequential execution safe for single PostgreSQL client connection)
     console.log('\n5. Verifying record parity and accounting precision between SQLite and PostgreSQL...');
-    const [
-      pgMerchantsRes,
-      pgUpisRes,
-      pgLinksRes,
-      pgCashiersRes,
-      pgTransactionsRes,
-      pgVolumeRes
-    ] = await Promise.all([
-      pgClient.query('SELECT COUNT(*) as c FROM merchants'),
-      pgClient.query('SELECT COUNT(*) as c FROM upis'),
-      pgClient.query('SELECT COUNT(*) as c FROM links'),
-      pgClient.query('SELECT COUNT(*) as c FROM cashiers'),
-      pgClient.query('SELECT COUNT(*) as c FROM transactions'),
-      pgClient.query('SELECT COALESCE(SUM(amount_paise), 0) as s FROM transactions')
-    ]);
+    const pgMerchantsRes = await pgClient.query('SELECT COUNT(*) as c FROM merchants');
+    const pgUpisRes = await pgClient.query('SELECT COUNT(*) as c FROM upis');
+    const pgLinksRes = await pgClient.query('SELECT COUNT(*) as c FROM links');
+    const pgCashiersRes = await pgClient.query('SELECT COUNT(*) as c FROM cashiers');
+    const pgTransactionsRes = await pgClient.query('SELECT COUNT(*) as c FROM transactions');
+    const pgVolumeRes = await pgClient.query('SELECT COALESCE(SUM(amount_paise), 0) as s FROM transactions');
 
     const pgCounts = {
       merchants: Number(pgMerchantsRes.rows[0].c),

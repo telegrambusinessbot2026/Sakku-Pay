@@ -815,25 +815,14 @@ function createPostgresRepository(clientOrPool = getPostgresPool()) {
         };
       },
       async getGlobalMetrics() {
-        const [
-          merchantsRes,
-          activeMerchantsRes,
-          suspendedMerchantsRes,
-          txCountRes,
-          linksCountRes,
-          activeLinksCountRes,
-          errorsCountRes,
-          successTxRes
-        ] = await Promise.all([
-          clientOrPool.query('SELECT COUNT(*) as c FROM merchants'),
-          clientOrPool.query('SELECT COUNT(*) as c FROM merchants WHERE suspended = FALSE'),
-          clientOrPool.query('SELECT COUNT(*) as c FROM merchants WHERE suspended = TRUE'),
-          clientOrPool.query('SELECT COUNT(*) as c FROM transactions'),
-          clientOrPool.query('SELECT COUNT(*) as c FROM links'),
-          clientOrPool.query('SELECT COUNT(*) as c FROM links WHERE active = TRUE'),
-          clientOrPool.query('SELECT COUNT(*) as c FROM errors'),
-          clientOrPool.query('SELECT amount, amount_paise FROM transactions WHERE status = \'success\'')
-        ]);
+        const merchantsRes = await clientOrPool.query('SELECT COUNT(*) as c FROM merchants');
+        const activeMerchantsRes = await clientOrPool.query('SELECT COUNT(*) as c FROM merchants WHERE suspended = FALSE');
+        const suspendedMerchantsRes = await clientOrPool.query('SELECT COUNT(*) as c FROM merchants WHERE suspended = TRUE');
+        const txCountRes = await clientOrPool.query('SELECT COUNT(*) as c FROM transactions');
+        const linksCountRes = await clientOrPool.query('SELECT COUNT(*) as c FROM links');
+        const activeLinksCountRes = await clientOrPool.query('SELECT COUNT(*) as c FROM links WHERE active = TRUE');
+        const errorsCountRes = await clientOrPool.query('SELECT COUNT(*) as c FROM errors');
+        const successTxRes = await clientOrPool.query('SELECT amount, amount_paise FROM transactions WHERE status = \'success\'');
 
         const totalMerchants = Number(merchantsRes.rows[0]?.c || 0);
         const activeMerchants = Number(activeMerchantsRes.rows[0]?.c || 0);
